@@ -1,0 +1,2 @@
+# Ignore condor job submission/output files
+condor/
