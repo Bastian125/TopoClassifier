@@ -1,5 +1,5 @@
 """
-Preprocess root files for training and store them as npy.
+Preprocess root files for training or plotting and store them as npy-files.
 """
 
 # ---------- Imports ---------- #
@@ -10,7 +10,15 @@ import uproot
 import numpy as np
 import pandas as pd
 
-from config import columns, log_features, normal_features, root_path, save_path
+from config import (
+    columns,
+    log_features,
+    normal_features,
+    data_root_path as root_path,
+    data_save_path as save_path,
+)
+
+from io import ensure_dir_exists
 
 # ---------- Argument Parser ---------- #
 parser = argparse.ArgumentParser(description="Perform preprocessing of root files.")
@@ -31,6 +39,7 @@ args = parser.parse_args()
 
 # ---------- Helper Functions ---------- #
 def apply_cuts(df):
+    """Apply cuts according to their physical meaning."""
     df.drop(df[df["clusterE"] <= 0].index, inplace=True)
     df.drop(df[df["cluster_ENG_CALIB_TOT"] <= 0.3].index, inplace=True)
     df.drop(df[df["cluster_CENTER_LAMBDA"] <= 0.0].index, inplace=True)
@@ -41,11 +50,13 @@ def apply_cuts(df):
 
 
 def compute_response(df):
+    """Compute cluster response (clusterE/cluster_ENG_CALIB_TOT)."""
     df["cluster_response"] = df["clusterE"] / df["cluster_ENG_CALIB_TOT"]
     df.drop("cluster_ENG_CALIB_TOT", axis=1, inplace=True)
 
 
 def apply_log(df, feature):
+    """Apply log10 scale to given features in dataset."""
     x = df[feature]
     min_val = x.min()
     epsilon = 1e-12
@@ -60,17 +71,20 @@ def apply_log(df, feature):
 
 
 def apply_normalisation(df, feature):
+    """Apply standard scaler normalisation to features in dataset."""
     x = df[feature]
     df[feature] = (x.mean() - x) / x.std()
 
 
 def apply_time_normalisation(df):
+    """Applies special normalisation for cluster_time."""
     x = df["cluster_time"]
     transformed = np.abs(x) ** (1 / 3) * np.sign(x)
     df["cluster_time"] = (transformed - transformed.mean()) / transformed.std()
 
 
 def preprocess_root_file(file_path, output_base_name, apply_norm=True):
+    """Preprocesses root file with or without normalisation depending on apply_norm=True or False."""
     print(f"Preprocessing: {file_path}")
     root_file = uproot.open(file_path)
     tree = root_file["ClusterTree;1"]
@@ -98,6 +112,9 @@ def preprocess_root_file(file_path, output_base_name, apply_norm=True):
         print("Special time normalization applied...")
     else:
         print("Skipping log scale, normalization and time transformation.")
+
+    # Make sure the directory exists before saving
+    ensure_dir_exists(save_path)
 
     os.makedirs(save_path, exist_ok=True)
     output_name = f"{output_base_name.replace('.npy','')}{tag}.npy"

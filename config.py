@@ -1,6 +1,6 @@
-# config.py
+"""Global config for all scripts."""
 
-# --- Feature Columns --- #
+# ---------- Feature Columns ---------- #
 columns = [
     "clusterE",
     "cluster_FIRST_ENG_DENS",
@@ -49,6 +49,9 @@ normal_features = [
     "cluster_ISOLATION",
 ]
 
-# --- Paths --- #
-root_path = "/ceph/e4/users/cdelitzsch/public/forClusterStudies/"
-save_path = "/ceph/e4/users/bschuchardt/public/MA/data/"
+# ---------- Paths ---------- #
+"""Define paths for orignal data, preprocessed data, and output path for plots."""
+
+data_root_path = "/ceph/e4/users/cdelitzsch/public/forClusterStudies/"
+data_save_path = "/ceph/e4/users/bschuchardt/public/MA/data/"
+output_path = "/ceph/e4/users/bschuchardt/public/MA/TopoClassifier/output"
