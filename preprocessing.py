@@ -18,7 +18,7 @@ from config import (
     data_save_path as save_path,
 )
 
-from io import ensure_dir_exists
+from io_utils import ensure_dir_exists
 
 # ---------- Argument Parser ---------- #
 parser = argparse.ArgumentParser(description="Perform preprocessing of root files.")
