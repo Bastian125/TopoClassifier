@@ -1,2 +1,5 @@
 # Ignore condor job submission/output files
 condor/
+
+# Ignore __pycache__
+__pycache__/
