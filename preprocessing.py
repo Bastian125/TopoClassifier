@@ -1,5 +1,5 @@
 """
-Preprocess root files for training or plotting and store them as npy-files.
+Preprocess root files for training or plotting and store them as hdf5-files.
 """
 
 # ---------- Imports ---------- #
@@ -7,6 +7,7 @@ import os
 import argparse
 
 import uproot
+import h5py
 import numpy as np
 import pandas as pd
 
@@ -117,9 +118,11 @@ def preprocess_root_file(file_path, output_base_name, apply_norm=True):
     ensure_dir_exists(save_path)
 
     os.makedirs(save_path, exist_ok=True)
-    output_name = f"{output_base_name.replace('.npy','')}{tag}.npy"
+    output_name = f"{output_base_name}{tag}.h5"
     output_path = os.path.join(save_path, output_name)
-    np.save(output_path, df.to_numpy())
+    with h5py.File(output_path, "w") as f:
+        for col in df.columns:
+            f.create_dataset(col, data=df[col].values)
     print(f"Saved preprocessed data to {output_path}\n")
 
 
@@ -131,12 +134,12 @@ def main():
         print("Test mode activated...")
         preprocess_root_file(
             os.path.join(root_path, "mc20e_withPU.root"),
-            "mc20e_withPU.npy",
+            "mc20e_withPU",
             apply_norm=apply_norm,
         )
         preprocess_root_file(
             os.path.join(root_path, "mc23e_withPU.root"),
-            "mc23e_withPU.npy",
+            "mc23e_withPU",
             apply_norm=apply_norm,
         )
     elif args.full:
@@ -144,7 +147,7 @@ def main():
         for tag in ["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"]:
             for pu in ["withPU", "noPU"]:
                 file_name = f"{tag}_{pu}.root"
-                output_name = f"{tag}_{pu}.npy"
+                output_name = f"{tag}_{pu}"
                 preprocess_root_file(
                     os.path.join(root_path, file_name),
                     output_name,
