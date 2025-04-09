@@ -3,6 +3,3 @@ condor/
 
 # Ignore __pycache__
 __pycache__/
-
-# Ignore output files
-output/
