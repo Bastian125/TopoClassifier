@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from config import data_save_path, output_path
 from io_utils import ensure_dir_exists
 
-# ---------- Config ---------- #
+# ---------- File Config ---------- #
 data20 = "mc20e_withPU_raw.h5"
 data23 = "mc23e_withPU_raw.h5"
 
@@ -91,6 +91,19 @@ def main():
             start=0,
             stop=100,
             xlabel=r"$\langle \mu \rangle$",
+            ylabel="Number of topoclusters",
+        )
+        save_plot(save_dir="20", output_name=f"{feature}_20")
+
+    if args.NPV:
+        feature = "NPV"
+        plot_feature(
+            feature="nPrimVtx",
+            campaign=20,
+            nbins=50,
+            start=0,
+            stop=50,
+            xlabel=r"$n_{\mathrm{PV}}$",
             ylabel="Number of topoclusters",
         )
         save_plot(save_dir="20", output_name=f"{feature}_20")
