@@ -42,9 +42,21 @@ def load_feature(feature, campaign):
         return f[feature][:]
 
 
-def plot_feature(feature, campaign, nbins, start, stop, log=False):
+def plot_feature(
+    feature,
+    campaign,
+    nbins,
+    start,
+    stop,
+    log=False,
+    xlabel=None,
+    ylabel="Relative number of clusters",
+    density=True,
+):
     """Plot a single feature, linear or log."""
     print(f"Plot {feature} for MC{campaign}e...")
+    if xlabel is None:
+        xlabel = feature
     feature_data = load_feature(feature=feature, campaign=campaign)
 
     if log:
@@ -54,33 +66,41 @@ def plot_feature(feature, campaign, nbins, start, stop, log=False):
         bins = nbins
         plt.xlim([start, stop])
 
-    plt.hist(feature_data, density=True, bins=bins, histtype="step")
-    plt.xlabel(feature)
-    plt.ylabel("Frequency")
+    plt.hist(feature_data, density=density, bins=bins, histtype="step")
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
     plt.tight_layout()
+
+
+def save_plot(save_dir, output_name):
+    """Saves plot to given save directory and output name."""
+    save_path = os.path.join(output_path, save_dir)
+    ensure_dir_exists(save_path)
+    plt.savefig(os.path.join(save_path, output_name) + ".pdf")
+    plt.close()
 
 
 # ---------- Main Function ---------- #
 def main():
-    ensure_dir_exists(output_path)
-
     if args.avgMu:
         feature = "avgMu"
-        plot_feature(feature=feature, campaign=20, nbins=100, start=0, stop=100)
-        save_path = os.path.join(output_path, "20")
-        ensure_dir_exists(save_path)
-        plt.savefig(os.path.join(save_path, f"{feature}_20.pdf"))
-        plt.close()
+        plot_feature(
+            feature=feature,
+            campaign=20,
+            nbins=40,
+            start=0,
+            stop=100,
+            xlabel=r"$\langle \mu \rangle$",
+            ylabel="Number of topoclusters",
+        )
+        save_plot(save_dir="20", output_name=f"{feature}_20")
 
     if args.clusterE:
         feature = "clusterE"
         plot_feature(
             feature=feature, campaign=20, nbins=50, start=1e-1, stop=1e2, log=True
         )
-        save_path = os.path.join(output_path, "20")
-        ensure_dir_exists(save_path)
-        plt.savefig(os.path.join(save_path, f"{feature}_20.pdf"))
-        plt.close()
+        save_plot(save_dir="20", output_name=f"{feature}_20")
 
 
 if __name__ == "__main__":
