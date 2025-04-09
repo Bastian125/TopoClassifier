@@ -130,8 +130,13 @@ def main():
     if args.test:
         print("Test mode activated...")
         preprocess_root_file(
-            os.path.join(root_path, "mc20a_withPU.root"),
-            "mc20a_withPU.npy",
+            os.path.join(root_path, "mc20e_withPU.root"),
+            "mc20e_withPU.npy",
+            apply_norm=apply_norm,
+        )
+        preprocess_root_file(
+            os.path.join(root_path, "mc23e_withPU.root"),
+            "mc23e_withPU.npy",
             apply_norm=apply_norm,
         )
     elif args.full:
