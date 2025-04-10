@@ -1,4 +1,6 @@
-"""Plots datasets."""
+"""
+Plots datasets.
+"""
 
 # ---------- Imports ---------- #
 import os
