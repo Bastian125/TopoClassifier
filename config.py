@@ -1,5 +1,12 @@
 """Global config for all scripts."""
 
+# ---------- Paths ---------- #
+"""Define paths for orignal data, preprocessed data, and output path for plots."""
+
+data_root_path = "/ceph/e4/users/cdelitzsch/public/forClusterStudies/"
+data_save_path = "/ceph/e4/users/bschuchardt/public/MA/data/"
+output_path = "/ceph/e4/users/bschuchardt/public/MA/TopoClassifier/output"
+
 # ---------- Feature Columns ---------- #
 columns = [
     "clusterE",
@@ -16,6 +23,14 @@ columns = [
     "cluster_LATERAL",
     "cluster_time",
     "cluster_ISOLATION",
+    "cluster_DELTA_ALPHA",
+    "cluster_DELTA_THETA",
+    "clusterEta",
+    "cluster_DELTA_PHI",
+    "clusterPhi",
+    "cluster_SECOND_LAMBDA",
+    "cluster_LONGITUDINAL",
+    "cluster_CELL_SIGNIFICANCE",
     "cluster_ENG_CALIB_TOT",
     "cluster_SIGNIFICANCE",
     "nPrimVtx",
@@ -31,6 +46,9 @@ log_features = [
     "cluster_AVG_TILE_Q",
     "cluster_AVG_LAR_Q",
     "cluster_SECOND_R",
+    "cluster_DELTA_ALPHA",
+    "cluster_SECOND_LAMBDA",
+    "cluster_CELL_SIGNIFICANCE",
 ]
 
 normal_features = [
@@ -47,11 +65,189 @@ normal_features = [
     "cluster_SECOND_R",
     "cluster_LATERAL",
     "cluster_ISOLATION",
+    "cluster_DELTA_THETA",
+    "clusterEta",
+    "cluster_DELTA_PHI",
+    "clusterPhi",
+    "cluster_LONGITUDINAL",
 ]
 
-# ---------- Paths ---------- #
-"""Define paths for orignal data, preprocessed data, and output path for plots."""
-
-data_root_path = "/ceph/e4/users/cdelitzsch/public/forClusterStudies/"
-data_save_path = "/ceph/e4/users/bschuchardt/public/MA/data/"
-output_path = "/ceph/e4/users/bschuchardt/public/MA/TopoClassifier/output"
+# ---------- Plot Configuration ---------- #
+plot_settings = {
+    "avgMu": {
+        "feature": "avgMu",
+        "nbins": 40,
+        "start": 0,
+        "stop": 100,
+        "xlabel": r"$\langle \mu \rangle$",
+        "ylabel": "Number of topoclusters",
+        "log": False,
+    },
+    "NPV": {
+        "feature": "nPrimVtx",
+        "nbins": 50,
+        "start": 0,
+        "stop": 50,
+        "xlabel": r"$n_{\mathrm{PV}}$",
+        "ylabel": "Number of topoclusters",
+        "log": False,
+    },
+    "clusterE": {
+        "feature": "clusterE",
+        "nbins": 50,
+        "start": 1e-1,
+        "stop": 1e2,
+        "xlabel": None,
+        "log": True,
+    },
+    "cluster_FIRST_ENG_DENS": {
+        "feature": "cluster_FIRST_ENG_DENS",
+        "nbins": 100,
+        "start": 1e-10,
+        "stop": 1e4,
+        "xlabel": None,
+        "log": True,
+    },
+    "cluster_EM_PROBABILITY": {
+        "feature": "cluster_EM_PROBABILITY",
+        "nbins": 50,
+        "start": 0,
+        "stop": 1,
+        "xlabel": None,
+    },
+    "cluster_CENTER_LAMBDA": {
+        "feature": "cluster_CENTER_LAMBDA",
+        "nbins": 50,
+        "start": 1e0,
+        "stop": 1e4,
+        "xlabel": None,
+        "log": True,
+    },
+    "cluster_nCells_tot": {
+        "feature": "cluster_nCells_tot",
+        "nbins": 50,
+        "start": 1e1,
+        "stop": 1e3,
+        "xlabel": None,
+        "log": True,
+    },
+    "cluster_CENTER_MAG": {
+        "feature": "cluster_CENTER_MAG",
+        "nbins": 50,
+        "start": 1000,
+        "stop": 7000,
+        "xlabel": None,
+    },
+    "cluster_ENG_FRAC_EM": {
+        "feature": "cluster_ENG_FRAC_EM",
+        "nbins": 50,
+        "start": 0,
+        "stop": 1,
+        "xlabel": None,
+    },
+    "cluster_SECOND_TIME": {
+        "feature": "cluster_SECOND_TIME",
+        "nbins": 50,
+        "start": 1000,
+        "stop": 7000,
+        "xlabel": None,
+        "log": True,
+    },
+    "cluster_AVG_TILE_Q": {
+        "feature": "cluster_AVG_TILE_Q",
+        "nbins": 50,
+        "start": 1000,
+        "stop": 7000,
+        "xlabel": None,
+        "log": True,
+    },
+    "cluster_AVG_LAR_Q": {
+        "feature": "cluster_AVG_LAR_Q",
+        "nbins": 50,
+        "start": 1000,
+        "stop": 7000,
+        "xlabel": None,
+        "log": True,
+    },
+    "cluster_SECOND_R": {
+        "feature": "cluster_SECOND_R",
+        "nbins": 50,
+        "start": 1000,
+        "stop": 7000,
+        "xlabel": None,
+        "log": True,
+    },
+    "cluster_LATERAL": {
+        "feature": "cluster_LATERAL",
+        "nbins": 50,
+        "start": 1000,
+        "stop": 7000,
+        "xlabel": None,
+    },
+    "cluster_time": {
+        "feature": "cluster_time",
+        "nbins": 50,
+        "start": 1000,
+        "stop": 7000,
+        "xlabel": None,
+    },
+    "cluster_ISOLATION": {
+        "feature": "cluster_ISOLATION",
+        "nbins": 50,
+        "start": 1000,
+        "stop": 7000,
+        "xlabel": None,
+    },
+    "cluster_DELTA_ALPHA": {
+        "feature": "cluster_DELTA_ALPHA",
+        "nbins": 50,
+        "start": 1000,
+        "stop": 7000,
+        "xlabel": None,
+        "log": True,
+    },
+    "cluster_DELTA_THETA": {
+        "feature": "cluster_DELTA_THETA",
+        "nbins": 50,
+        "start": 1000,
+        "stop": 7000,
+        "xlabel": None,
+    },
+    "clusterEta": {
+        "feature": "clusterEta",
+        "nbins": 50,
+        "start": 1000,
+        "stop": 7000,
+        "xlabel": None,
+    },
+    "clusterPhi": {
+        "feature": "clusterPhi",
+        "nbins": 50,
+        "start": 1000,
+        "stop": 7000,
+        "xlabel": None,
+    },
+    "cluster_SECOND_LAMBDA": {
+        "feature": "cluster_SECOND_LAMBDA",
+        "nbins": 50,
+        "start": 1000,
+        "stop": 7000,
+        "xlabel": None,
+        "log": True,
+    },
+    "cluster_LONGITUDINAL": {
+        "feature": "cluster_LONGITUDINAL",
+        "nbins": 50,
+        "start": 1000,
+        "stop": 7000,
+        "xlabel": None,
+    },
+    "cluster_CELL_SIGNIFICANCE": {
+        "feature": "cluster_CELL_SIGNIFICANCE",
+        "nbins": 50,
+        "start": 1000,
+        "stop": 7000,
+        "xlabel": None,
+        "log": True,
+    },
+}
