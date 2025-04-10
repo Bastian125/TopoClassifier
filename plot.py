@@ -19,10 +19,13 @@ data23 = "mc23e_withPU_raw.h5"
 # ---------- Argument Parser ---------- #
 parser = argparse.ArgumentParser(description="Plot cluster features for MC20e/MC23e.")
 mode_group = parser.add_mutually_exclusive_group(required=True)
-mode_group.add_argument("--avgMu", action="store_true", help="Plot avgMu distribution.")
-mode_group.add_argument("--NPV", action="store_true", help="Plot n_PV distribution.")
 mode_group.add_argument(
-    "--clusterE", action="store_true", help="Plot clusterE distribution."
+    "--run_comparison",
+    action="store_true",
+    help="Plot comparison of every feature for Run 2 and Run 3.",
+)
+mode_group.add_argument(
+    "--NPV_comparison", action="store_true", help="Plot every feature."
 )
 args = parser.parse_args()
 
@@ -82,38 +85,7 @@ def save_plot(save_dir, output_name):
 
 # ---------- Main Function ---------- #
 def main():
-    if args.avgMu:
-        feature = "avgMu"
-        plot_feature(
-            feature=feature,
-            campaign=20,
-            nbins=40,
-            start=0,
-            stop=100,
-            xlabel=r"$\langle \mu \rangle$",
-            ylabel="Number of topoclusters",
-        )
-        save_plot(save_dir="20", output_name=f"{feature}_20")
-
-    if args.NPV:
-        feature = "NPV"
-        plot_feature(
-            feature="nPrimVtx",
-            campaign=20,
-            nbins=50,
-            start=0,
-            stop=50,
-            xlabel=r"$n_{\mathrm{PV}}$",
-            ylabel="Number of topoclusters",
-        )
-        save_plot(save_dir="20", output_name=f"{feature}_20")
-
-    if args.clusterE:
-        feature = "clusterE"
-        plot_feature(
-            feature=feature, campaign=20, nbins=50, start=1e-1, stop=1e2, log=True
-        )
-        save_plot(save_dir="20", output_name=f"{feature}_20")
+    return 0
 
 
 if __name__ == "__main__":
