@@ -14,6 +14,8 @@ from io_utils import ensure_dir_exists
 # ---------- File Config ---------- #
 data20 = "mc20e_withPU_raw.h5"
 data23 = "mc23e_withPU_raw.h5"
+data_noPU_20 = "mc20e_noPU_raw.h5"
+data_noPU_23 = "mc23e_noPU_raw.h5"
 
 
 # ---------- Argument Parser ---------- #
@@ -25,18 +27,36 @@ mode_group.add_argument(
     help="Plot comparison of every feature for Run 2 and Run 3.",
 )
 mode_group.add_argument(
-    "--NPV_comparison", action="store_true", help="Plot every feature."
+    "--NPV_comparison",
+    action="store_true",
+    help="Plot every feature for different n_PV bins for both campaigns.",
+)
+mode_group.add_argument(
+    "--response",
+    action="store_true",
+    help="Creates response plots for different n_PV bins for both campaigns.",
+)
+mode_group.add_argument(
+    "--response_noPU_vs_PU",
+    action="store_true",
+    help="Creates response plots for different n_PV bins, and no pile-up for both campaigns.",
 )
 args = parser.parse_args()
 
 
 # ---------- Helper Functions ---------- #
-def load_feature(feature, campaign):
+def load_feature(feature, campaign, PU=True):
     """Load feature for MC20e or MC23e from HDF5 file."""
-    if campaign == 20:
-        data = data20
-    elif campaign == 23:
-        data = data23
+    if PU == False:
+        if campaign == 20:
+            data = data_noPU_20
+        elif campaign == 23:
+            data = data_noPU_23
+    elif PU == True:
+        if campaign == 20:
+            data = data20
+        elif campaign == 23:
+            data = data23
 
     file_path = os.path.join(data_save_path, data)
     print(f"Load {feature} for MC{campaign}e from {file_path}...")
@@ -75,6 +95,121 @@ def plot_feature(
     plt.tight_layout()
 
 
+def plot_response(campaign):
+    """Plots response for one MC campaign and for different n_PV bins."""
+    response = load_feature("cluster_response", campaign)
+    n_PV = load_feature("nPrimVtx", campaign)
+
+    nbins = 100
+    beginning = 0
+    end = 100
+    hrange = [beginning, end]
+    lim = (beginning, end)
+
+    plt.hist(
+        response[(n_PV <= 10)],
+        bins=nbins,
+        range=hrange,
+        histtype="step",
+        density=True,
+        label=r"$ 1 < n_{\mathrm{PV}} \leq 10$",
+    )
+    plt.hist(
+        response[(n_PV <= 20) & (n_PV > 10)],
+        bins=nbins,
+        range=hrange,
+        histtype="step",
+        density=True,
+        label=r"$10 < n_{\mathrm{PV}} \leq 20$",
+    )
+    plt.hist(
+        response[(n_PV <= 30) & (n_PV > 20)],
+        bins=nbins,
+        range=hrange,
+        histtype="step",
+        density=True,
+        label=r"$20 < n_{\mathrm{PV}} \leq 30$",
+    )
+    plt.hist(
+        response[(n_PV > 30)],
+        bins=nbins,
+        range=hrange,
+        histtype="step",
+        density=True,
+        label=r"$n_{\mathrm{PV}} > 30$",
+    )
+    plt.yscale("log")
+    plt.xlabel(r"Response")
+    plt.ylabel(r"Number of clusters")
+    plt.xlim(lim)
+    plt.legend()
+    plt.tight_layout()
+    save_plot("response", f"response_{campaign}")
+    plt.close()
+
+
+def plot_response_with_and_with_out_PU(campaign):
+    """Plots response for one MC campaign and for different n_PV bins."""
+    response = load_feature("cluster_response", campaign)
+    response_noPU = load_feature("cluster_response", campaign, PU=False)
+    n_PV = load_feature("nPrimVtx", campaign)
+
+    nbins = 100
+    beginning = 0
+    end = 100
+    hrange = [beginning, end]
+    lim = (beginning, end)
+
+    plt.hist(
+        response[(n_PV <= 10)],
+        bins=nbins,
+        range=hrange,
+        histtype="step",
+        density=True,
+        label=r"$ 1 < n_{\mathrm{PV}} \leq 10$",
+    )
+    plt.hist(
+        response[(n_PV <= 20) & (n_PV > 10)],
+        bins=nbins,
+        range=hrange,
+        histtype="step",
+        density=True,
+        label=r"$10 < n_{\mathrm{PV}} \leq 20$",
+    )
+    plt.hist(
+        response[(n_PV <= 30) & (n_PV > 20)],
+        bins=nbins,
+        range=hrange,
+        histtype="step",
+        density=True,
+        label=r"$20 < n_{\mathrm{PV}} \leq 30$",
+    )
+    plt.hist(
+        response[(n_PV > 30)],
+        bins=nbins,
+        range=hrange,
+        histtype="step",
+        density=True,
+        label=r"$n_{\mathrm{PV}} > 30$",
+    )
+    plt.hist(
+        response_noPU,
+        bins=nbins,
+        range=hrange,
+        histtype="step",
+        density=True,
+        label="No pile-up",
+    )
+    plt.yscale("log")
+    plt.xlabel(r"Response")
+    plt.ylabel(r"Number of clusters")
+    plt.xlim(lim)
+    plt.legend()
+    plt.tight_layout()
+    save_plot("response", f"noPU_vs_PU_response_{campaign}")
+    plt.close()
+
+
 def save_plot(save_dir, output_name):
     """Saves plot to given save directory and output name."""
     save_path = os.path.join(output_path, save_dir)
@@ -85,7 +220,13 @@ def save_plot(save_dir, output_name):
 
 # ---------- Main Function ---------- #
 def main():
-    return 0
+    if args.response:
+        for campaign in [20, 23]:
+            plot_response(campaign)
+
+    if args.response_noPU_vs_PU:
+        for campaign in [20, 23]:
+            plot_response_with_and_with_out_PU(campaign)
 
 
 if __name__ == "__main__":
