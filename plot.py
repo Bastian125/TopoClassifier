@@ -54,7 +54,7 @@ mode_group.add_argument(
 mode_group.add_argument(
     "--PU_response",
     action="store_true",
-    help="Plot mean and median cluster response in n_PV bins for clusters with the complete energy ramge," \
+    help="Plot mean and median cluster response in n_PV bins for clusters with the complete energy ramge,"
     "clusters with energy lower than 100~GeV, and clusters with energy greater than or equal to 100~GeV ",
 )
 args = parser.parse_args()
@@ -226,10 +226,69 @@ def plot_response_with_and_with_out_PU(campaign):
     plt.close()
 
 
-def plot_mean_meadian_response(campaign):
+def plot_mean_meadian_response(campaign, energy):
     """Plots mean and median response in n_PV bins between 10 and 50 for cluster with the complete energy range, clusters with energy less than 100~GeV, and clusters with energy greater than or equal to 100~GeV"""
-    response = load_feature("cluster_response", campaign)
-    n_PV = load_feature("nPrimVtx", campaign)
+    if energy == "all":
+        response = load_feature("cluster_response", campaign)
+        clusterE = load_feature("clusterE", campaign)
+        n_PV = load_feature("nPrimVtx", campaign)
+    elif energy == "<100~GeV":
+        response = load_feature("cluster_response", campaign)
+        clusterE = load_feature("clusterE", campaign)
+        n_PV = load_feature("nPrimVtx", campaign)
+
+        # Apply cuts
+        response = response[clusterE < 100]
+        n_PV = n_PV[clusterE < 100]
+
+    elif energy == ">=100~GeV":
+        response = load_feature("cluster_response", campaign)
+        clusterE = load_feature("clusterE", campaign)
+        n_PV = load_feature("nPrimVtx", campaign)
+
+        # Apply cuts
+        response = response[clusterE >= 100]
+        n_PV = n_PV[clusterE >= 100]
+
+    n_PV_bins = np.arange(10, 50, 5)
+    mean_response = []
+    median_response = []
+    n_PV_centers = []
+
+    for i in range(len(n_PV_bins) - 1):
+        n_PV_min, n_PV_max = n_PV_bins[i], n_PV_bins[i + 1]
+        n_PV_mask = (n_PV >= n_PV_min) & (n_PV < n_PV_max)
+        responses_in_bin = response[n_PV_mask]
+
+        # Avoid empty bins
+        if len(responses_in_bin) > 0:
+            mean_val = np.mean(responses_in_bin)
+            median_val = np.median(responses_in_bin)
+        else:
+            mean_val = np.nan
+            median_val = np.nan
+
+        # Store results
+        mean_response.append(mean_val)
+        median_response.append(median_val)
+        n_PV_centers.append((n_PV_min + n_PV_max) / 2)
+
+    plt.plot(n_PV_centers, mean_response, marker="o", linestyle="None", label="Mean")
+    plt.plot(
+        n_PV_centers, median_response, marker="o", linestyle="None", label="Median"
+    )
+    plt.xlim(10, 45)
+    plt.xlabel(r"$N_{\mathrm{PV}}$")
+    plt.ylabel(r"Response")
+    plt.legend()
+    plt.tight_layout()
+    if energy == "all":
+        save_plot("response", f"mean_median_{campaign}")
+    elif energy == "<100~GeV":
+        save_plot("response", f"mean_median_<100~GeV_{campaign}")
+    elif energy == ">=100~GeV":
+        save_plot("response", f"mean_median_>=100~GeV_{campaign}")
+    plt.close()
 
 
 def save_plot(save_dir, output_name):
@@ -243,18 +302,18 @@ def save_plot(save_dir, output_name):
 # ---------- Main Function ---------- #
 def main():
     if args.avgMu:
-            feature = "avgMu"
-            for campaign in [20, 23]:
-                plot_feature(
-                    feature=feature,
-                    campaign=campaign,
-                    nbins=40,
-                    start=0,
-                    stop=100,
-                    xlabel=r"$\langle \mu \rangle$",
-                    ylabel="Number of topoclusters",
-                )
-                save_plot(save_dir=f"{campaign}", output_name=f"{feature}_{campaign}")
+        feature = "avgMu"
+        for campaign in [20, 23]:
+            plot_feature(
+                feature=feature,
+                campaign=campaign,
+                nbins=40,
+                start=0,
+                stop=100,
+                xlabel=r"$\langle \mu \rangle$",
+                ylabel="Number of topoclusters",
+            )
+            save_plot(save_dir=f"{campaign}", output_name=f"{feature}_{campaign}")
 
     if args.NPV:
         feature = "nPrimVtx"
@@ -280,7 +339,8 @@ def main():
 
     if args.PU_response:
         for campaign in [20, 23]:
-            plot_mean_meadian_response(campaign)
+            for energy in ["all", "<100~GeV", ">=100~GeV"]:
+                plot_mean_meadian_response(campaign, energy)
 
 
 if __name__ == "__main__":
