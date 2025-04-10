@@ -1,4 +1,6 @@
-"""Global config for all scripts."""
+"""
+Global config for all scripts.
+"""
 
 # ---------- Paths ---------- #
 """Define paths for orignal data, preprocessed data, and output path for plots."""

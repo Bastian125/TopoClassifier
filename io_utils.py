@@ -1,4 +1,6 @@
-"""Input/output methods for checking that folders exist or creating them if neccessary."""
+"""
+Input/output methods for checking that folders exist or creating them if neccessary.
+"""
 
 # ---------- Imports ---------- #
 import os
