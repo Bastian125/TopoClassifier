@@ -22,6 +22,16 @@ data_noPU_23 = "mc23e_noPU_raw.h5"
 parser = argparse.ArgumentParser(description="Plot cluster features for MC20e/MC23e.")
 mode_group = parser.add_mutually_exclusive_group(required=True)
 mode_group.add_argument(
+    "--avgMu",
+    action="store_true",
+    help="Plots distribution of avgMu for both campaigns",
+)
+mode_group.add_argument(
+    "--NPV",
+    action="store_true",
+    help="Plots distribution of n_PV for both campaigns",
+)
+mode_group.add_argument(
     "--run_comparison",
     action="store_true",
     help="Plot comparison of every feature for Run 2 and Run 3.",
@@ -40,6 +50,12 @@ mode_group.add_argument(
     "--response_noPU_vs_PU",
     action="store_true",
     help="Creates response plots for different n_PV bins, and no pile-up for both campaigns.",
+)
+mode_group.add_argument(
+    "--PU_response",
+    action="store_true",
+    help="Plot mean and median cluster response in n_PV bins for clusters with the complete energy ramge," \
+    "clusters with energy lower than 100~GeV, and clusters with energy greater than or equal to 100~GeV ",
 )
 args = parser.parse_args()
 
@@ -210,6 +226,12 @@ def plot_response_with_and_with_out_PU(campaign):
     plt.close()
 
 
+def plot_mean_meadian_response(campaign):
+    """Plots mean and median response in n_PV bins between 10 and 50 for cluster with the complete energy range, clusters with energy less than 100~GeV, and clusters with energy greater than or equal to 100~GeV"""
+    response = load_feature("cluster_response", campaign)
+    n_PV = load_feature("nPrimVtx", campaign)
+
+
 def save_plot(save_dir, output_name):
     """Saves plot to given save directory and output name."""
     save_path = os.path.join(output_path, save_dir)
@@ -220,6 +242,34 @@ def save_plot(save_dir, output_name):
 
 # ---------- Main Function ---------- #
 def main():
+    if args.avgMu:
+            feature = "avgMu"
+            for campaign in [20, 23]:
+                plot_feature(
+                    feature=feature,
+                    campaign=campaign,
+                    nbins=40,
+                    start=0,
+                    stop=100,
+                    xlabel=r"$\langle \mu \rangle$",
+                    ylabel="Number of topoclusters",
+                )
+                save_plot(save_dir=f"{campaign}", output_name=f"{feature}_{campaign}")
+
+    if args.NPV:
+        feature = "nPrimVtx"
+        for campaign in [20, 23]:
+            plot_feature(
+                feature=feature,
+                campaign=campaign,
+                nbins=50,
+                start=0,
+                stop=50,
+                xlabel=r"$n_{\mathrm{PV}}$",
+                ylabel="Number of topoclusters",
+            )
+            save_plot(save_dir=f"{campaign}", output_name=f"{feature}_{campaign}")
+
     if args.response:
         for campaign in [20, 23]:
             plot_response(campaign)
@@ -227,6 +277,10 @@ def main():
     if args.response_noPU_vs_PU:
         for campaign in [20, 23]:
             plot_response_with_and_with_out_PU(campaign)
+
+    if args.PU_response:
+        for campaign in [20, 23]:
+            plot_mean_meadian_response(campaign)
 
 
 if __name__ == "__main__":
