@@ -64,7 +64,6 @@ normal_features = [
     "cluster_SECOND_TIME",
     "cluster_AVG_TILE_Q",
     "cluster_AVG_LAR_Q",
-    "cluster_SECOND_R",
     "cluster_LATERAL",
     "cluster_ISOLATION",
     "cluster_DELTA_THETA",
