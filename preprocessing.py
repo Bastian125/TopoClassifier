@@ -40,7 +40,9 @@ args = parser.parse_args()
 
 # ---------- Helper Functions ---------- #
 def apply_cuts(df):
-    """Apply cuts according to their physical meaning."""
+    """
+    Apply cuts according to their physical meaning.
+    """
     df.drop(df[df["clusterE"] <= 0].index, inplace=True)
     df.drop(df[df["cluster_ENG_CALIB_TOT"] <= 0.3].index, inplace=True)
     df.drop(df[df["cluster_CENTER_LAMBDA"] <= 0.0].index, inplace=True)
@@ -51,13 +53,17 @@ def apply_cuts(df):
 
 
 def compute_response(df):
-    """Compute cluster response (clusterE/cluster_ENG_CALIB_TOT)."""
+    """
+    Compute cluster response (clusterE/cluster_ENG_CALIB_TOT).
+    """
     df["cluster_response"] = df["clusterE"] / df["cluster_ENG_CALIB_TOT"]
     df.drop("cluster_ENG_CALIB_TOT", axis=1, inplace=True)
 
 
 def apply_log(df, feature):
-    """Apply log10 scale to given features in dataset."""
+    """
+    Apply log10 scale to given features in dataset.
+    """
     x = df[feature]
     min_val = x.min()
     epsilon = 1e-12
@@ -72,20 +78,26 @@ def apply_log(df, feature):
 
 
 def apply_normalisation(df, feature):
-    """Apply standard scaler normalisation to features in dataset."""
+    """
+    Apply standard scaler normalisation to features in dataset.
+    """
     x = df[feature]
     df[feature] = (x.mean() - x) / x.std()
 
 
 def apply_time_normalisation(df):
-    """Applies special normalisation for cluster_time."""
+    """
+    Applies special normalisation for cluster_time.
+    """
     x = df["cluster_time"]
     transformed = np.abs(x) ** (1 / 3) * np.sign(x)
     df["cluster_time"] = (transformed - transformed.mean()) / transformed.std()
 
 
 def preprocess_root_file(file_path, output_base_name, apply_norm=True):
-    """Preprocesses root file with or without normalisation depending on apply_norm=True or False."""
+    """
+    Preprocesses root file with or without normalisation depending on apply_norm=True or False.
+    """
     print(f"Preprocessing: {file_path}")
     root_file = uproot.open(file_path)
     tree = root_file["ClusterTree;1"]

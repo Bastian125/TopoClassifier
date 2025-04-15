@@ -69,7 +69,9 @@ args = parser.parse_args()
 
 # ---------- Helper Functions ---------- #
 def load_feature(feature, campaign, PU=True):
-    """Load feature for MC20e or MC23e from HDF5 file."""
+    """
+    Load feature for MC20e or MC23e from HDF5 file.
+    """
     if PU == False:
         if campaign == 20:
             data = data_noPU_20
@@ -99,7 +101,9 @@ def plot_feature(
     ylabel="Relative number of clusters",
     density=True,
 ):
-    """Plot a single feature, linear or log."""
+    """
+    Plot a single feature, linear or log.
+    """
     print(f"Plot {feature} for MC{campaign}e...")
     if xlabel is None:
         xlabel = feature
@@ -119,7 +123,9 @@ def plot_feature(
 
 
 def plot_response(campaign):
-    """Plots response for one MC campaign and for different n_PV bins."""
+    """
+    Plots response for one MC campaign and for different n_PV bins.
+    """
     response = load_feature("cluster_response", campaign)
     n_PV = load_feature("nPrimVtx", campaign)
 
@@ -172,7 +178,9 @@ def plot_response(campaign):
 
 
 def plot_response_with_and_with_out_PU(campaign):
-    """Plots response for one MC campaign and for different n_PV bins."""
+    """
+    Plots response for one MC campaign and for different n_PV bins.
+    """
     response = load_feature("cluster_response", campaign)
     response_noPU = load_feature("cluster_response", campaign, PU=False)
     n_PV = load_feature("nPrimVtx", campaign)
@@ -234,7 +242,9 @@ def plot_response_with_and_with_out_PU(campaign):
 
 
 def plot_mean_meadian_response(campaign, energy):
-    """Plots mean and median response in n_PV bins between 10 and 50 for cluster with the complete energy range, clusters with energy less than 100~GeV, and clusters with energy greater than or equal to 100~GeV"""
+    """
+    Plots mean and median response in n_PV bins between 10 and 50 for cluster with the complete energy range, clusters with energy less than 100~GeV, and clusters with energy greater than or equal to 100~GeV
+    """
     if energy == "all":
         response = load_feature("cluster_response", campaign)
         clusterE = load_feature("clusterE", campaign)
@@ -299,7 +309,9 @@ def plot_mean_meadian_response(campaign, energy):
 
 
 def plot_run_comparison(features):
-    """Plot each feature for Run 2 (MC20e) and Run 3 (MC23e) in one plot."""
+    """
+    Plot each feature for Run 2 (MC20e) and Run 3 (MC23e) in one plot.
+    """
     for feature_key in features:
         settings = plot_settings[feature_key]
         feature = settings["feature"]
@@ -334,7 +346,9 @@ def plot_run_comparison(features):
 
 
 def plot_features_overlayed_by_nPV_bins():
-    """Plot all features for MC20e and MC23e campaigns with overlaid n_PV bins in one plot."""
+    """
+    Plot all features for MC20e and MC23e campaigns with overlaid n_PV bins in one plot.
+    """
     nPV_bins = [
         (None, 10),  # nPV < 10
         (10, 20),  # 10 <= nPV < 20
@@ -402,7 +416,9 @@ def plot_features_overlayed_by_nPV_bins():
 
 
 def plot_high_response():
-    """Plot every feature for MC20e and MC23e campaigns, overlaying clusters with response <= 40 and > 40."""
+    """
+    Plot every feature for MC20e and MC23e campaigns, overlaying clusters with response <= 40 and > 40.
+    """
     response_threshold = 40
     response_label = r"$R_{\mathrm{clus}}^{\mathrm{EM}}$"
     categories = [(None, response_threshold), (response_threshold, None)]
@@ -466,7 +482,9 @@ def plot_high_response():
 
 
 def save_plot(save_dir, output_name):
-    """Saves plot to given save directory and output name."""
+    """
+    Saves plot to given save directory and output name.
+    """
     save_path = os.path.join(output_path, save_dir)
     ensure_dir_exists(save_path)
     plt.savefig(os.path.join(save_path, output_name) + ".pdf")
