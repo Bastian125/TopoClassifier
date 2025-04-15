@@ -328,6 +328,74 @@ def plot_run_comparison(features):
         plt.close()
 
 
+def plot_features_overlayed_by_nPV_bins():
+    """Plot all features for MC20e and MC23e campaigns with overlaid n_PV bins in one plot."""
+    nPV_bins = [
+        (None, 10),  # nPV < 10
+        (10, 20),  # 10 <= nPV < 20
+        (20, 30),  # 20 <= nPV < 30
+        (30, None),  # nPV > 30
+    ]
+    nPV_labels = [
+        r"$n_{\mathrm{PV}} < 10$",
+        r"$10 \leq n_{\mathrm{PV}} < 20$",
+        r"$20 \leq n_{\mathrm{PV}} < 30$",
+        r"$n_{\mathrm{PV}} > 30$",
+    ]
+    colors = ["blue", "orange", "green", "red"]
+
+    for campaign in [20, 23]:
+        n_PV = load_feature("nPrimVtx", campaign)
+
+        for feature_key, settings in plot_settings.items():
+            feature_name = settings["feature"]
+            feature_data = load_feature(feature_name, campaign)
+            nbins = settings["nbins"]
+            start = settings["start"]
+            stop = settings["stop"]
+            log = settings.get("log", False)
+            xlabel = settings.get("xlabel", feature_name)
+            ylabel = settings.get("ylabel", "Relative number of clusters")
+            density = settings.get("density", True)
+
+            if log:
+                bins = np.logspace(np.log10(start), np.log10(stop), nbins)
+                plt.xscale("log")
+            else:
+                bins = nbins
+                plt.xlim([start, stop])
+
+            # Create overlayed histograms
+            for (low, high), label, color in zip(nPV_bins, nPV_labels, colors):
+                if low is None:
+                    mask = n_PV < high
+                elif high is None:
+                    mask = n_PV > low
+                else:
+                    mask = (n_PV >= low) & (n_PV < high)
+
+                filtered_data = feature_data[mask]
+
+                plt.hist(
+                    filtered_data,
+                    bins=bins,
+                    density=density,
+                    histtype="step",
+                    label=label,
+                    color=color,
+                )
+
+            plt.xlabel(xlabel)
+            plt.ylabel(ylabel)
+            plt.legend()
+            plt.tight_layout()
+
+            save_plot(
+                save_dir=f"{campaign}", output_name=f"{feature_name}_nPV_comparison"
+            )
+            plt.close()
+
+
 def save_plot(save_dir, output_name):
     """Saves plot to given save directory and output name."""
     save_path = os.path.join(output_path, save_dir)
@@ -368,6 +436,9 @@ def main():
 
     if args.run_comparison:
         plot_run_comparison(plot_settings)
+
+    if args.NPV_comparison:
+        plot_features_overlayed_by_nPV_bins()
 
     if args.response:
         for campaign in [20, 23]:
