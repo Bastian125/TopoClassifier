@@ -161,7 +161,7 @@ plot_settings = {
         "start": 1000,
         "stop": 7000,
         "xlabel": None,
-        "log": True,
+        "log": False,
     },
     "cluster_AVG_LAR_Q": {
         "feature": "cluster_AVG_LAR_Q",
@@ -169,7 +169,7 @@ plot_settings = {
         "start": 1000,
         "stop": 7000,
         "xlabel": None,
-        "log": True,
+        "log": False,
     },
     "cluster_SECOND_R": {
         "feature": "cluster_SECOND_R",

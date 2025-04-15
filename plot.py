@@ -10,7 +10,7 @@ import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 
-from config import data_save_path, output_path
+from config import data_save_path, output_path, plot_settings
 from io_utils import ensure_dir_exists
 
 # ---------- File Config ---------- #
@@ -293,6 +293,41 @@ def plot_mean_meadian_response(campaign, energy):
     plt.close()
 
 
+def plot_run_comparison(features):
+    """Plot each feature for Run 2 (MC20e) and Run 3 (MC23e) in one plot."""
+    for feature_key in features:
+        settings = plot_settings[feature_key]
+        feature = settings["feature"]
+        nbins = settings["nbins"]
+        start = settings["start"]
+        stop = settings["stop"]
+        log = settings.get("log", False)
+        xlabel = settings.get("xlabel", feature)
+        ylabel = settings.get("ylabel", "Relative number of clusters")
+        density = settings.get("density", True)
+
+        print(f"Comparing feature '{feature}' between MC20e and MC23e...")
+
+        feature_20 = load_feature(feature, 20)
+        feature_23 = load_feature(feature, 23)
+
+        if log:
+            bins = np.logspace(np.log10(start), np.log10(stop), nbins)
+            plt.xscale("log")
+        else:
+            bins = nbins
+            plt.xlim([start, stop])
+
+        plt.hist(feature_20, density=density, bins=bins, histtype="step", label="MC20e")
+        plt.hist(feature_23, density=density, bins=bins, histtype="step", label="MC23e")
+        plt.xlabel(xlabel)
+        plt.ylabel(ylabel)
+        plt.legend()
+        plt.tight_layout()
+        save_plot("run_comparison", f"{feature}_run_comparison")
+        plt.close()
+
+
 def save_plot(save_dir, output_name):
     """Saves plot to given save directory and output name."""
     save_path = os.path.join(output_path, save_dir)
@@ -330,6 +365,9 @@ def main():
                 ylabel="Number of topoclusters",
             )
             save_plot(save_dir=f"{campaign}", output_name=f"{feature}_{campaign}")
+
+    if args.run_comparison:
+        plot_run_comparison(plot_settings)
 
     if args.response:
         for campaign in [20, 23]:
