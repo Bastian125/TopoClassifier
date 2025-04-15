@@ -44,6 +44,11 @@ mode_group.add_argument(
     help="Plot every feature for different n_PV bins for both campaigns.",
 )
 mode_group.add_argument(
+    "--high_response",
+    action="store_true",
+    help="Plot every feature of both campaigns for cluster response lower or equal to 40 or higher than 40 for comparison.",
+)
+mode_group.add_argument(
     "--response",
     action="store_true",
     help="Creates response plots for different n_PV bins for both campaigns.",
@@ -396,6 +401,70 @@ def plot_features_overlayed_by_nPV_bins():
             plt.close()
 
 
+def plot_high_response():
+    """Plot every feature for MC20e and MC23e campaigns, overlaying clusters with response <= 40 and > 40."""
+    response_threshold = 40
+    response_label = r"$R_{\mathrm{clus}}^{\mathrm{EM}}$"
+    categories = [(None, response_threshold), (response_threshold, None)]
+    category_labels = [
+        rf"{response_label} $\leq$ {response_threshold}",
+        rf"{response_label} $>$ {response_threshold}",
+    ]
+    colors = ["blue", "red"]
+
+    for campaign in [20, 23]:
+        cluster_response = load_feature("cluster_response", campaign)
+
+        for feature_key, settings in plot_settings.items():
+            feature_name = settings["feature"]
+            feature_data = load_feature(feature_name, campaign)
+            nbins = settings["nbins"]
+            start = settings["start"]
+            stop = settings["stop"]
+            log = settings.get("log", False)
+            xlabel = settings.get("xlabel", feature_name)
+            ylabel = settings.get("ylabel", "Relative number of clusters")
+            density = settings.get("density", True)
+
+            if log:
+                bins = np.logspace(np.log10(start), np.log10(stop), nbins)
+                plt.xscale("log")
+            else:
+                bins = nbins
+                plt.xlim([start, stop])
+
+            # Overlay for response <= 40 and > 40
+            for (low, high), label, color in zip(categories, category_labels, colors):
+                if low is None:
+                    mask = cluster_response <= high
+                elif high is None:
+                    mask = cluster_response > low
+                else:
+                    mask = (cluster_response > low) & (cluster_response <= high)
+
+                filtered_data = feature_data[mask]
+
+                plt.hist(
+                    filtered_data,
+                    bins=bins,
+                    density=density,
+                    histtype="step",
+                    label=label,
+                    color=color,
+                )
+
+            plt.xlabel(xlabel)
+            plt.ylabel(ylabel)
+            plt.legend()
+            plt.tight_layout()
+
+            save_plot(
+                save_dir=f"{campaign}/response_comparison",
+                output_name=f"{feature_name}_high_response",
+            )
+            plt.close()
+
+
 def save_plot(save_dir, output_name):
     """Saves plot to given save directory and output name."""
     save_path = os.path.join(output_path, save_dir)
@@ -439,6 +508,9 @@ def main():
 
     if args.NPV_comparison:
         plot_features_overlayed_by_nPV_bins()
+
+    if args.high_response:
+        plot_high_response()
 
     if args.response:
         for campaign in [20, 23]:
