@@ -48,6 +48,22 @@ MODEL_OUTPUT = "trained_dnn_model.h5"
 parser = argparse.ArgumentParser(
     description="Train ML models on data of Run 2 and Run 3 of ATLAS."
 )
+data_group = parser.add_mutually_exclusive_group(required=True)
+data_group.add_argument(
+    "--mc20a",
+    action="store_true",
+    help="Train model with MC20a data for fast code tests.",
+)
+data_group.add_argument(
+    "--mc20",
+    action="store_true",
+    help="Train model with MC20 data.",
+)
+data_group.add_argument(
+    "--mc23",
+    action="store_true",
+    help="Train model with MC23 data.",
+)
 mode_group = parser.add_mutually_exclusive_group(required=True)
 mode_group.add_argument(
     "--train",
@@ -74,11 +90,11 @@ def load_data(filename):
 
 def load_testrun_data():
     """
-    Just load and concatenate MC20e with and w/o pile-up for code test runs.
+    Just load and concatenate MC20a with and w/o pile-up for code test runs.
     """
     print("Load data for test run...")
-    X_bkg, y_bkg = load_data("mc20e_withPU_norm.h5")
-    X_sig, y_sig = load_data("mc20e_noPU_norm.h5")
+    X_bkg, y_bkg = load_data("mc20a_withPU_norm.h5")
+    X_sig, y_sig = load_data("mc20a_noPU_norm.h5")
     X = np.concatenate([X_bkg, X_sig])
     y = np.concatenate([y_bkg, y_sig])
     return X, y
@@ -134,21 +150,55 @@ def build_dnn_model(input_dim):
     return model
 
 
+def plot_training_history(history):
+    """
+    Plot training history of ML model.
+    """
+    print("Plot training history...")
+    plt.figure()
+    plt.plot(history.history['accuracy'], label='Train Accuracy')
+    plt.plot(history.history['val_accuracy'], label='Val Accuracy')
+    plt.plot(history.history['auc'], label='Train AUC')
+    plt.plot(history.history['val_auc'], label='Val AUC')
+    plt.xlabel('Epoch')
+    plt.ylabel('Metric')
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_path, "ML/training_history.pdf"))
+    plt.close()
+
+
 # ---------- Main Function ---------- #
 def main():
     if args.train:
         # Load data
-        X, y = load_testrun_data()
+        if args.mc20a:
+            X, y = load_testrun_data()
+        elif args.mc20:
+            X, y = load_data(20)
+        elif args.mc23:
+            X, y = load_data(23)
 
         # Apply train test split
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=TEST_SIZE, random_state=RANDOM_STATE
+            X,
+            y,
+            test_size=TEST_SIZE,
+            random_state=RANDOM_STATE,
+            stratify=y,
         )
 
-        # Build DNN model
-        build_dnn_model(X_train.shape[1])
+        # Build and train DNN model
+        dnn_model = build_dnn_model(X_train.shape[1])
+        print("Train model...")
+        history = dnn_model.fit(X_train, y_train, validation_split=0.35, epochs=EPOCHS, batch_size=BATCH_SIZE)
 
-    print("Script finished...")
+        # Save model
+        dnn_model.save(os.path.join(output_path, MODEL_OUTPUT))
+        print(f"Model saved to {os.path.join(output_path, MODEL_OUTPUT)}...")
+
+        # Plot training history
+        plot_training_history(history)
 
 
 if __name__ == "__main__":
