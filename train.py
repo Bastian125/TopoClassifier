@@ -17,6 +17,7 @@ from keras import layers, models
 from sklearn.model_selection import train_test_split
 
 from config import data_save_path, output_path
+from io_utils import ensure_dir_exists
 
 
 # ---------- File Config ---------- #
@@ -39,9 +40,9 @@ feature_keys = [
 
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
-BATCH_SIZE = 256
-EPOCHS = 30
-MODEL_OUTPUT = "trained_dnn_model.h5"
+BATCH_SIZE = 512
+EPOCHS = 10
+MODEL_OUTPUT = "models/trained_dnn_model.h5"
 
 
 # ---------- Argument Parser ---------- #
@@ -126,7 +127,7 @@ def load_full_data(campaign):
     return X, y
 
 
-def build_dnn_model(input_dim):
+def build_dnn_model(input_dim, lr):
     """
     Build DNN model for classifying hard-scatter and pile-up only clusters.
     """
@@ -134,16 +135,35 @@ def build_dnn_model(input_dim):
     model = models.Sequential(
         [
             layers.Input(shape=(input_dim,)),
-            layers.Dense(64, activation="relu"),
-            layers.Dropout(0.2),
-            layers.Dense(32, activation="relu"),
-            layers.Dropout(0.2),
+            layers.Dense(512),
+            layers.BatchNormalization(),
+            layers.Activation("relu"),
+
+            layers.Dense(256),
+            layers.BatchNormalization(),
+            layers.Activation("relu"),
+
+            layers.Dense(128),
+            layers.BatchNormalization(),
+            layers.Activation("relu"),
+
+            layers.Dense(64),
+            layers.BatchNormalization(),
+            layers.Activation("relu"),
+            layers.Dropout(0.3),
+
+            layers.Dense(32),
+            layers.BatchNormalization(),
+            layers.Activation("relu"),
+            layers.Dropout(0.3),
+
             layers.Dense(16, activation="relu"),
+            layers.Dense(8, activation="relu"),
             layers.Dense(1, activation="sigmoid"),
         ]
     )
     model.compile(
-        optimizer="adam",
+        optimizer=tf.keras.optimizers.Adam(learning_rate=lr),
         loss="binary_crossentropy",
         metrics=["accuracy", tf.keras.metrics.AUC(name="auc")],
     )
@@ -164,9 +184,11 @@ def plot_training_history(history):
     plt.ylabel('Metric')
     plt.legend()
     plt.tight_layout()
-    plt.savefig(os.path.join(output_path, "ML/training_history.pdf"))
+    directory = os.path.join(output_path, "ML")
+    ensure_dir_exists(directory)
+    save_path = os.path.join(directory, "training_history.pdf")
+    plt.savefig(save_path)
     plt.close()
-
 
 # ---------- Main Function ---------- #
 def main():
@@ -175,9 +197,9 @@ def main():
         if args.mc20a:
             X, y = load_testrun_data()
         elif args.mc20:
-            X, y = load_data(20)
+            X, y = load_full_data(20)
         elif args.mc23:
-            X, y = load_data(23)
+            X, y = load_full_data(23)
 
         # Apply train test split
         X_train, X_test, y_train, y_test = train_test_split(
@@ -189,13 +211,14 @@ def main():
         )
 
         # Build and train DNN model
-        dnn_model = build_dnn_model(X_train.shape[1])
+        dnn_model = build_dnn_model(X_train.shape[1], lr=1e-3)
         print("Train model...")
         history = dnn_model.fit(X_train, y_train, validation_split=0.35, epochs=EPOCHS, batch_size=BATCH_SIZE)
 
         # Save model
-        dnn_model.save(os.path.join(output_path, MODEL_OUTPUT))
-        print(f"Model saved to {os.path.join(output_path, MODEL_OUTPUT)}...")
+        save_path = os.path.join(output_path, MODEL_OUTPUT)
+        dnn_model.save(save_path)
+        print(f"Model saved to {save_path}...")
 
         # Plot training history
         plot_training_history(history)
