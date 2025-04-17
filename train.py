@@ -138,25 +138,20 @@ def build_dnn_model(input_dim, lr):
             layers.Dense(512),
             layers.BatchNormalization(),
             layers.Activation("relu"),
-
             layers.Dense(256),
             layers.BatchNormalization(),
             layers.Activation("relu"),
-
             layers.Dense(128),
             layers.BatchNormalization(),
             layers.Activation("relu"),
-
             layers.Dense(64),
             layers.BatchNormalization(),
             layers.Activation("relu"),
             layers.Dropout(0.3),
-
             layers.Dense(32),
             layers.BatchNormalization(),
             layers.Activation("relu"),
             layers.Dropout(0.3),
-
             layers.Dense(16, activation="relu"),
             layers.Dense(8, activation="relu"),
             layers.Dense(1, activation="sigmoid"),
@@ -176,12 +171,12 @@ def plot_training_history(history):
     """
     print("Plot training history...")
     plt.figure()
-    plt.plot(history.history['accuracy'], label='Train Accuracy')
-    plt.plot(history.history['val_accuracy'], label='Val Accuracy')
-    plt.plot(history.history['auc'], label='Train AUC')
-    plt.plot(history.history['val_auc'], label='Val AUC')
-    plt.xlabel('Epoch')
-    plt.ylabel('Metric')
+    plt.plot(history.history["accuracy"], label="Train Accuracy")
+    plt.plot(history.history["val_accuracy"], label="Val Accuracy")
+    plt.plot(history.history["auc"], label="Train AUC")
+    plt.plot(history.history["val_auc"], label="Val AUC")
+    plt.xlabel("Epoch")
+    plt.ylabel("Metric")
     plt.legend()
     plt.tight_layout()
     directory = os.path.join(output_path, "ML")
@@ -189,6 +184,7 @@ def plot_training_history(history):
     save_path = os.path.join(directory, "training_history.pdf")
     plt.savefig(save_path)
     plt.close()
+
 
 # ---------- Main Function ---------- #
 def main():
@@ -213,7 +209,13 @@ def main():
         # Build and train DNN model
         dnn_model = build_dnn_model(X_train.shape[1], lr=1e-3)
         print("Train model...")
-        history = dnn_model.fit(X_train, y_train, validation_split=0.35, epochs=EPOCHS, batch_size=BATCH_SIZE)
+        history = dnn_model.fit(
+            X_train,
+            y_train,
+            validation_split=0.35,
+            epochs=EPOCHS,
+            batch_size=BATCH_SIZE,
+        )
 
         # Save model
         save_path = os.path.join(output_path, MODEL_OUTPUT)
