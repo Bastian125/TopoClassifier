@@ -3,3 +3,6 @@ condor/
 
 # Ignore __pycache__
 __pycache__/
+
+# Ignore predictions
+output/ML/predictions.h5
