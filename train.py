@@ -15,6 +15,7 @@ import tensorflow as tf
 from tensorflow import keras
 from keras import layers, models
 from sklearn.model_selection import train_test_split
+from sklearn.utils import class_weight
 
 from config import data_save_path, output_path
 from io_utils import ensure_dir_exists
@@ -41,7 +42,7 @@ feature_keys = [
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
 BATCH_SIZE = 512
-EPOCHS = 10
+EPOCHS = 50
 MODEL_OUTPUT = "models/trained_dnn_model.h5"
 
 
@@ -65,11 +66,29 @@ data_group.add_argument(
     action="store_true",
     help="Train model with MC23 data.",
 )
+
+model_group = parser.add_mutually_exclusive_group(required=True)
+model_group.add_argument(
+    "--DNN1",
+    action="store_true",
+    help="DNN model that classifies hard-scatter and pile-up clusters.",
+)
+model_group.add_argument(
+    "--DNN2",
+    action="store_true",
+    help="DNN model that classifies pile-up only and mixed clusters.",
+)
+
 mode_group = parser.add_mutually_exclusive_group(required=True)
 mode_group.add_argument(
     "--train",
     action="store_true",
     help="Train ML model.",
+)
+mode_group.add_argument(
+    "--test",
+    action="store_true",
+    help="Test ML model.",
 )
 args = parser.parse_args()
 
@@ -135,25 +154,20 @@ def build_dnn_model(input_dim, lr):
     model = models.Sequential(
         [
             layers.Input(shape=(input_dim,)),
-            layers.Dense(512),
+            layers.Dense(512, activation="relu"),
             layers.BatchNormalization(),
-            layers.Activation("relu"),
-            layers.Dense(256),
+            layers.Dense(256, activation="relu"),
             layers.BatchNormalization(),
-            layers.Activation("relu"),
-            layers.Dense(128),
+            layers.Dense(128, activation="relu"),
             layers.BatchNormalization(),
-            layers.Activation("relu"),
-            layers.Dense(64),
+            layers.Dense(64, activation="relu"),
             layers.BatchNormalization(),
-            layers.Activation("relu"),
             layers.Dropout(0.3),
-            layers.Dense(32),
+            layers.Dense(32, activation="relu"),
             layers.BatchNormalization(),
-            layers.Activation("relu"),
             layers.Dropout(0.3),
-            layers.Dense(16, activation="relu"),
             layers.Dense(8, activation="relu"),
+            layers.BatchNormalization(),
             layers.Dense(1, activation="sigmoid"),
         ]
     )
@@ -224,6 +238,52 @@ def main():
 
         # Plot training history
         plot_training_history(history)
+
+    if args.test:
+        # Load model
+        save_path = os.path.join(output_path, MODEL_OUTPUT)
+        model = keras.models.load_model(save_path, compile=True)
+        if model is None:
+            print("No model found...")
+            return
+
+        # Load test data
+        if args.mc20a:
+            X, y = load_testrun_data()
+        elif args.mc20:
+            X, y = load_full_data(20)
+        elif args.mc23:
+            X, y = load_full_data(23)
+
+        # Split the data
+        _, X_test, _, y_test = train_test_split(
+            X,
+            y,
+            test_size=TEST_SIZE,
+            random_state=RANDOM_STATE,
+            stratify=y,
+        )
+
+        # Evaluate model
+        print("Evaluate model on test set...")
+        loss, accuracy, auc = model.evaluate(X_test, y_test, verbose=1)
+        print(f"Test Loss: {loss:.4f}")
+        print(f"Test Accuracy: {accuracy:.4f}")
+        print(f"Test AUC: {auc:.4f}")
+
+        # Predict and save output scores
+        print("Generate predictions...")
+        y_pred = model.predict(X_test, verbose=1)
+
+        output_dir = os.path.join(output_path, "ML")
+        ensure_dir_exists(output_dir)
+        predictions_path = os.path.join(output_dir, "predictions.h5")
+
+        with h5py.File(predictions_path, "w") as f:
+            f.create_dataset("y_true", data=y_test)
+            f.create_dataset("y_pred", data=y_pred)
+
+        print(f"Predictions saved to {predictions_path}")
 
 
 if __name__ == "__main__":
