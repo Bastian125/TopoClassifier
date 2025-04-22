@@ -57,7 +57,6 @@ def compute_response(df):
     Compute cluster response (clusterE/cluster_ENG_CALIB_TOT).
     """
     df["cluster_response"] = df["clusterE"] / df["cluster_ENG_CALIB_TOT"]
-    df.drop("cluster_ENG_CALIB_TOT", axis=1, inplace=True)
 
 
 def apply_log(df, feature):
