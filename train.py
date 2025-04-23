@@ -89,6 +89,11 @@ mode_group.add_argument(
     action="store_true",
     help="Test ML model.",
 )
+mode_group.add_argument(
+    "--plot-history",
+    action="store_true",
+    help="Plots the training history."
+)
 args = parser.parse_args()
 
 
@@ -311,7 +316,7 @@ def main():
     if args.test:
         # Load model
         model_path = os.path.join(output_path, "ML", dataset_str, f"{model_str}.h5")
-        model = keras.models.load_model(model_path, compile=False)
+        model = keras.models.load_model(model_path, compile=True)
 
         if model is None:
             print("No model found...")
