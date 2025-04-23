@@ -149,7 +149,8 @@ def preprocess_root_file(file_path, output_base_name, apply_norm=True):
 
     # Apply avgMu cut only for PU samples
     if "withPU" in output_base_name:
-        df = apply_high_pile_up_cut(df)
+        if apply_norm == True:
+            df = apply_high_pile_up_cut(df)
         df["label"] = 0
     else:
         df["label"] = 1
