@@ -42,8 +42,7 @@ feature_keys = [
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
 BATCH_SIZE = 512
-EPOCHS = 50
-MODEL_OUTPUT = "models/trained_dnn_model.h5"
+EPOCHS = 400
 
 
 # ---------- Argument Parser ---------- #
@@ -91,6 +90,24 @@ mode_group.add_argument(
     help="Test ML model.",
 )
 args = parser.parse_args()
+
+
+# --------- Define Dataset and Model Type --------- #
+if args.mc20a:
+    dataset_str = "Run2a"
+elif args.mc20:
+    dataset_str = "Run2"
+elif args.mc23:
+    dataset_str = "Run3"
+else:
+    raise ValueError("No dataset selected")
+
+if args.DNN1:
+    model_str = "DNN1"
+elif args.DNN2:
+    model_str = "DNN2"
+else:
+    raise ValueError("No model type selected")
 
 
 # ---------- Helper Functions ---------- #
@@ -220,19 +237,46 @@ def main():
             stratify=y,
         )
 
-        # Build and train DNN model
+        # Build DNN model
         dnn_model = build_dnn_model(X_train.shape[1], lr=1e-3)
+
+        # Reweighting
+        weights = class_weight.compute_class_weight(
+            class_weight="balanced", classes=np.unique(y_train), y=y_train
+        )
+
+        class_weights = {0: weights[0], 1: weights[1]}
+
+        # Early stopping
+        early_stop = keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            patience=20,
+            start_from_epoch=100,
+            restore_best_weights=False,
+        )
+
+        # Train model
         print("Train model...")
         history = dnn_model.fit(
             X_train,
             y_train,
-            validation_split=0.35,
+            validation_split=0.25,
             epochs=EPOCHS,
             batch_size=BATCH_SIZE,
+            class_weight=class_weights,
+            callbacks=[early_stop],
         )
 
+        # Save history to h5
+        history_path = os.path.join(directory, f"{model_str}_history.h5")
+        with h5py.File(history_path, "w") as f:
+            for key, values in history.history.items():
+                f.create_dataset(key, data=values)
+
         # Save model
-        save_path = os.path.join(output_path, MODEL_OUTPUT)
+        directory = os.path.join(output_path, "ML", dataset_str)
+        ensure_dir_exists(directory)
+        save_path = os.path.join(directory, f"{model_str}.h5")
         dnn_model.save(save_path)
         print(f"Model saved to {save_path}...")
 
@@ -241,8 +285,9 @@ def main():
 
     if args.test:
         # Load model
-        save_path = os.path.join(output_path, MODEL_OUTPUT)
-        model = keras.models.load_model(save_path, compile=True)
+        model_path = os.path.join(output_path, "ML", dataset_str, f"{model_str}.h5")
+        model = keras.models.load_model(model_path, compile=False)
+
         if model is None:
             print("No model found...")
             return
