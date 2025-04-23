@@ -44,13 +44,21 @@ def apply_cuts(df):
     Apply cuts according to their physical meaning.
     """
     df = df[
-    (df["clusterE"] > 0) &
-    (df["cluster_ENG_CALIB_TOT"] > 0.3) &
-    (df["cluster_CENTER_LAMBDA"] > 0.0) &
-    (df["cluster_FIRST_ENG_DENS"] > 0.0) &
-    (df["cluster_SECOND_TIME"] > 0.0) &
-    (df["cluster_SIGNIFICANCE"] > 0.0)
+        (df["cluster_ENG_CALIB_TOT"] > 0.3)
+        & (df["clusterE"] > 0)
+        & (df["cluster_CENTER_LAMBDA"] > 0.0)
+        & (df["cluster_FIRST_ENG_DENS"] > 0.0)
+        & (df["cluster_SECOND_TIME"] > 0.0)
+        & (df["cluster_SIGNIFICANCE"] > 0.0)
     ].drop("cluster_SIGNIFICANCE", axis=1)
+    return df
+
+
+def apply_high_pile_up_cut(df):
+    """
+    Apply avgMu cut so that the background data truly reflects pile-up dominated clusters.
+    """
+    df = df[(df["avgMu"] > 20)]
     return df
 
 
@@ -95,9 +103,40 @@ def apply_time_normalisation(df):
     df["cluster_time"] = (transformed - transformed.mean()) / transformed.std()
 
 
+def concatenate_samples(tags, apply_norm=True):
+    """
+    Concatenates datasets for mc20 and mc23 into single files each.
+    Only called when apply_norm is True.
+    """
+    for prefix in ["mc20", "mc23"]:
+        data_frames = []
+        for tag in tags:
+            if not tag.startswith(prefix):
+                continue
+            for pu in ["withPU", "noPU"]:
+                output_name = f"{tag}_{pu}"
+                tag_suffix = "_norm" if apply_norm else "_raw"
+                file_path = os.path.join(save_path, f"{output_name}{tag_suffix}.h5")
+                if not os.path.exists(file_path):
+                    continue
+                with h5py.File(file_path, "r") as f:
+                    data = {key: f[key][()] for key in f}
+                    data_frames.append(pd.DataFrame(data))
+
+        if data_frames:
+            combined_df = pd.concat(data_frames, ignore_index=True)
+            output_name = f"{prefix}_combined{'_norm' if apply_norm else '_raw'}.h5"
+            output_path = os.path.join(save_path, output_name)
+            with h5py.File(output_path, "w") as f:
+                for col in combined_df.columns:
+                    f.create_dataset(col, data=combined_df[col].values)
+            print(f"Saved combined {prefix} file to {output_path}")
+
+
 def preprocess_root_file(file_path, output_base_name, apply_norm=True):
     """
     Preprocesses root file with or without normalisation depending on apply_norm=True or False.
+    Applies avgMu cut only to withPU samples and adds a 'label' column.
     """
     print(f"Preprocessing: {file_path}")
     root_file = uproot.open(file_path)
@@ -107,6 +146,13 @@ def preprocess_root_file(file_path, output_base_name, apply_norm=True):
 
     df = apply_cuts(df)
     print("Cuts applied...")
+
+    # Apply avgMu cut only for PU samples
+    if "withPU" in output_base_name:
+        df = apply_high_pile_up_cut(df)
+        df["label"] = 0
+    else:
+        df["label"] = 1
 
     compute_response(df)
     print("Response computed...")
@@ -127,7 +173,6 @@ def preprocess_root_file(file_path, output_base_name, apply_norm=True):
     else:
         print("Skipping log scale, normalization and time transformation.")
 
-    # Make sure the directory exists before saving
     ensure_dir_exists(save_path)
     output_name = f"{output_base_name}{tag}.h5"
     output_path = os.path.join(save_path, output_name)
@@ -155,7 +200,8 @@ def main():
         )
     elif args.full:
         print("Full mode activated...")
-        for tag in ["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"]:
+        tags = ["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"]
+        for tag in tags:
             for pu in ["withPU", "noPU"]:
                 file_name = f"{tag}_{pu}.root"
                 output_name = f"{tag}_{pu}"
@@ -164,6 +210,10 @@ def main():
                     output_name,
                     apply_norm=apply_norm,
                 )
+
+        # Call concatenation only if normalization is applied
+        if apply_norm:
+            concatenate_samples(tags, apply_norm=apply_norm)
 
 
 if __name__ == "__main__":
