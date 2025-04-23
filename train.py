@@ -42,7 +42,7 @@ feature_keys = [
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
 BATCH_SIZE = 512
-EPOCHS = 400
+EPOCHS = 2
 
 
 # ---------- Argument Parser ---------- #
@@ -201,18 +201,43 @@ def plot_training_history(history):
     Plot training history of ML model.
     """
     print("Plot training history...")
-    plt.figure()
-    plt.plot(history.history["accuracy"], label="Train Accuracy")
-    plt.plot(history.history["val_accuracy"], label="Val Accuracy")
-    plt.plot(history.history["auc"], label="Train AUC")
-    plt.plot(history.history["val_auc"], label="Val AUC")
-    plt.xlabel("Epoch")
-    plt.ylabel("Metric")
-    plt.legend()
-    plt.tight_layout()
-    directory = os.path.join(output_path, "ML")
+    fig = plt.figure(figsize=[12, 6])
+    gs = fig.add_gridspec(2, hspace=0.1, height_ratios=[1, 0.3])
+    ax = gs.subplots(sharex=True, sharey=False)
+    ax[0].plot(
+        history.history["loss"],
+        "bo",
+        label="loss",
+        markersize=1.5,
+        linestyle="dashed",
+    )
+    ax[0].plot(
+        history.history["val_loss"],
+        "go",
+        label="val_loss",
+        markersize=1.5,
+        linestyle="dashed",
+    )
+    ax[1].plot(
+        np.array(history.history["val_loss"]) - np.array(history.history["loss"]),
+        "bo",
+        markersize=2,
+        linestyle="dashed",
+        label="val_loss - train_loss",
+    )
+
+    ax[1].set_xlabel("Epoch")
+    ax[1].set_ylim(-0.03, 0.03)
+    # Show only ticks and labels in the outer sides of the plots
+    for a in ax:
+        a.label_outer()
+    ax[0].legend()
+    ax[1].legend()
+    ax[0].grid(True)
+    ax[1].grid(True)
+    directory = os.path.join(output_path, "ML", dataset_str)
     ensure_dir_exists(directory)
-    save_path = os.path.join(directory, "training_history.pdf")
+    save_path = os.path.join(directory, f"{model_str}_training_history.pdf")
     plt.savefig(save_path)
     plt.close()
 
@@ -268,14 +293,14 @@ def main():
         )
 
         # Save history to h5
+        directory = os.path.join(output_path, "ML", dataset_str)
+        ensure_dir_exists(directory)
         history_path = os.path.join(directory, f"{model_str}_history.h5")
         with h5py.File(history_path, "w") as f:
             for key, values in history.history.items():
                 f.create_dataset(key, data=values)
 
         # Save model
-        directory = os.path.join(output_path, "ML", dataset_str)
-        ensure_dir_exists(directory)
         save_path = os.path.join(directory, f"{model_str}.h5")
         dnn_model.save(save_path)
         print(f"Model saved to {save_path}...")
