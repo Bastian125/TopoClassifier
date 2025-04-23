@@ -43,13 +43,15 @@ def apply_cuts(df):
     """
     Apply cuts according to their physical meaning.
     """
-    df.drop(df[df["clusterE"] <= 0].index, inplace=True)
-    df.drop(df[df["cluster_ENG_CALIB_TOT"] <= 0.3].index, inplace=True)
-    df.drop(df[df["cluster_CENTER_LAMBDA"] <= 0.0].index, inplace=True)
-    df.drop(df[df["cluster_FIRST_ENG_DENS"] <= 0.0].index, inplace=True)
-    df.drop(df[df["cluster_SECOND_TIME"] <= 0.0].index, inplace=True)
-    df.drop(df[df["cluster_SIGNIFICANCE"] <= 0.0].index, inplace=True)
-    df.drop("cluster_SIGNIFICANCE", axis=1, inplace=True)
+    df = df[
+    (df["clusterE"] > 0) &
+    (df["cluster_ENG_CALIB_TOT"] > 0.3) &
+    (df["cluster_CENTER_LAMBDA"] > 0.0) &
+    (df["cluster_FIRST_ENG_DENS"] > 0.0) &
+    (df["cluster_SECOND_TIME"] > 0.0) &
+    (df["cluster_SIGNIFICANCE"] > 0.0)
+    ].drop("cluster_SIGNIFICANCE", axis=1)
+    return df
 
 
 def compute_response(df):
@@ -103,7 +105,7 @@ def preprocess_root_file(file_path, output_base_name, apply_norm=True):
     df = tree.arrays(columns, library="pd")
     print("Data loaded...")
 
-    apply_cuts(df)
+    df = apply_cuts(df)
     print("Cuts applied...")
 
     compute_response(df)
@@ -127,8 +129,6 @@ def preprocess_root_file(file_path, output_base_name, apply_norm=True):
 
     # Make sure the directory exists before saving
     ensure_dir_exists(save_path)
-
-    os.makedirs(save_path, exist_ok=True)
     output_name = f"{output_base_name}{tag}.h5"
     output_path = os.path.join(save_path, output_name)
     with h5py.File(output_path, "w") as f:
