@@ -6,11 +6,45 @@ Plots probabilites that cluster belongs to a given class, ROC-curve, and precisi
 import numpy as np
 import matplotlib.pyplot as plt
 import h5py
+import argparse
+
 from sklearn.metrics import (
     roc_curve,
     auc,
     precision_recall_curve,
     average_precision_score,
+)
+
+
+# ---------- Argument Parser ---------- #
+parser = argparse.ArgumentParser(description="Evaluate ML models.")
+data_group = parser.add_mutually_exclusive_group(required=True)
+data_group.add_argument(
+    "--mc20a",
+    action="store_true",
+    help="Evaluate model trained on MC20a data.",
+)
+data_group.add_argument(
+    "--mc20",
+    action="store_true",
+    help="Evaluate model trained on MC20 data.",
+)
+data_group.add_argument(
+    "--mc23",
+    action="store_true",
+    help="Evaluate model trained on MC23 data.",
+)
+
+model_group = parser.add_mutually_exclusive_group(required=True)
+model_group.add_argument(
+    "--DNN1",
+    action="store_true",
+    help="DNN model that classifies hard-scatter and pile-up clusters.",
+)
+model_group.add_argument(
+    "--DNN2",
+    action="store_true",
+    help="DNN model that classifies pile-up only and mixed clusters.",
 )
 
 
