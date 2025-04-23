@@ -90,9 +90,7 @@ mode_group.add_argument(
     help="Test ML model.",
 )
 mode_group.add_argument(
-    "--plot-history",
-    action="store_true",
-    help="Plots the training history."
+    "--plot", action="store_true", help="Plots the training history."
 )
 args = parser.parse_args()
 
@@ -240,9 +238,9 @@ def plot_training_history(history):
     ax[1].legend()
     ax[0].grid(True)
     ax[1].grid(True)
-    directory = os.path.join(output_path, "ML", dataset_str)
-    ensure_dir_exists(directory)
-    save_path = os.path.join(directory, f"{model_str}_training_history.pdf")
+    output_directory = os.path.join(output_path, "ML", dataset_str)
+    ensure_dir_exists(output_directory)
+    save_path = os.path.join(output_directory, f"{model_str}_training_history.pdf")
     plt.savefig(save_path)
     plt.close()
 
@@ -298,15 +296,15 @@ def main():
         )
 
         # Save history to h5
-        directory = os.path.join(output_path, "ML", dataset_str)
-        ensure_dir_exists(directory)
-        history_path = os.path.join(directory, f"{model_str}_history.h5")
+        output_directory = os.path.join(output_path, "ML", dataset_str)
+        ensure_dir_exists(output_directory)
+        history_path = os.path.join(output_directory, f"{model_str}_history.h5")
         with h5py.File(history_path, "w") as f:
             for key, values in history.history.items():
                 f.create_dataset(key, data=values)
 
         # Save model
-        save_path = os.path.join(directory, f"{model_str}.h5")
+        save_path = os.path.join(output_directory, f"{model_str}.h5")
         dnn_model.save(save_path)
         print(f"Model saved to {save_path}...")
 
@@ -359,6 +357,19 @@ def main():
             f.create_dataset("y_pred", data=y_pred)
 
         print(f"Predictions saved to {predictions_path}")
+
+    if args.plot:
+        print("Load training history...")
+        # Path to the history file
+        output_directory = os.path.join(output_path, "ML", dataset_str)
+        history_path = os.path.join(output_directory, f"{model_str}_history.h5")
+
+        # Load the training history
+        with h5py.File(history_path, "r") as f:
+            history = {key: list(f[key][:]) for key in f.keys()}
+
+        # Plot training history
+        plot_training_history(type("History", (), {"history": history}))
 
 
 if __name__ == "__main__":
