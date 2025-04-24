@@ -24,6 +24,7 @@ class HDF5DataGenerator(tf.keras.utils.Sequence):
         self.val_split = val_split
         self.random_state = random_state
         self.data, self.labels = self._load_and_split_data()
+        self.input_dim = self.data.shape[1]
         self.indices = np.arange(len(self.labels))
         if self.shuffle:
             np.random.shuffle(self.indices)
