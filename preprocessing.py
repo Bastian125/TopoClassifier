@@ -39,18 +39,26 @@ args = parser.parse_args()
 
 
 # ---------- Helper Functions ---------- #
-def apply_cuts(df):
+def apply_cuts(df, with_pu, apply_norm):
     """
-    Apply cuts according to their physical meaning.
+    Apply cuts based on PU type, normalization flag, and their physical meaning.
     """
+    if with_pu and apply_norm:
+        eng_calib_cut = 0.0
+    elif not with_pu:
+        eng_calib_cut = 0.3
+    else:
+        eng_calib_cut = -np.inf  # No cut when withPU and apply_norm is False
+
     df = df[
-        (df["cluster_ENG_CALIB_TOT"] > 0.3)
+        (df["cluster_ENG_CALIB_TOT"] > eng_calib_cut)
         & (df["clusterE"] > 0)
         & (df["cluster_CENTER_LAMBDA"] > 0.0)
         & (df["cluster_FIRST_ENG_DENS"] > 0.0)
         & (df["cluster_SECOND_TIME"] > 0.0)
         & (df["cluster_SIGNIFICANCE"] > 0.0)
     ].drop("cluster_SIGNIFICANCE", axis=1)
+
     return df
 
 
@@ -106,7 +114,7 @@ def apply_time_normalisation(df):
 def concatenate_samples(tags, apply_norm=True):
     """
     Concatenates datasets for mc20 and mc23 into single files each.
-    Only called when apply_norm is True.
+    Only called when apply_norm is True. (Currently not used)
     """
     for prefix in ["mc20", "mc23"]:
         data_frames = []
@@ -144,7 +152,8 @@ def preprocess_root_file(file_path, output_base_name, apply_norm=True):
     df = tree.arrays(columns, library="pd")
     print("Data loaded...")
 
-    df = apply_cuts(df)
+    with_pu = "withPU" in output_base_name
+    df = apply_cuts(df, with_pu)
     print("Cuts applied...")
 
     # Apply avgMu cut only for PU samples
@@ -211,10 +220,6 @@ def main():
                     output_name,
                     apply_norm=apply_norm,
                 )
-
-        # Call concatenation only if normalization is applied
-        if apply_norm:
-            concatenate_samples(tags, apply_norm=apply_norm)
 
 
 if __name__ == "__main__":
