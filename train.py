@@ -42,7 +42,7 @@ feature_keys = [
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
 BATCH_SIZE = 512
-EPOCHS = 2
+EPOCHS = 10
 
 
 # ---------- Argument Parser ---------- #
@@ -121,10 +121,7 @@ def load_data(filename):
     file_path = os.path.join(data_save_path, filename)
     with h5py.File(file_path, "r") as f:
         X = np.stack([f[key][:] for key in feature_keys], axis=1)
-        if "noPU" in os.path.basename(filename):
-            y = np.ones(X.shape[0])
-        elif "withPU" in os.path.basename(filename):
-            y = np.zeros(X.shape[0])
+        y = f["label"][:]
     return X, y
 
 
