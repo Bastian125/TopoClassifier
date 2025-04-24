@@ -153,7 +153,7 @@ def preprocess_root_file(file_path, output_base_name, apply_norm=True):
     print("Data loaded...")
 
     with_pu = "withPU" in output_base_name
-    df = apply_cuts(df, with_pu)
+    df = apply_cuts(df, with_pu, apply_norm=apply_norm)
     print("Cuts applied...")
 
     # Apply avgMu cut only for PU samples
