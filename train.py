@@ -19,6 +19,7 @@ from sklearn.utils import class_weight
 
 from config import data_save_path, output_path
 from io_utils import ensure_dir_exists
+from dataloader import HDF5DataGenerator
 
 
 # ---------- File Config ---------- #
