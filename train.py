@@ -245,33 +245,67 @@ def plot_training_history(history):
 
 # ---------- Main Function ---------- #
 def main():
+    # Prepare file paths
+    if args.mc20a:
+        file_paths = [
+            os.path.join(data_save_path, "mc20a_withPU_norm.h5"),
+            os.path.join(data_save_path, "mc20a_noPU_norm.h5"),
+        ]
+        dataset_str = "Run2a"
+    elif args.mc20:
+        file_paths = [
+            os.path.join(data_save_path, "mc20a_withPU_norm.h5"),
+            os.path.join(data_save_path, "mc20a_noPU_norm.h5"),
+            os.path.join(data_save_path, "mc20d_withPU_norm.h5"),
+            os.path.join(data_save_path, "mc20d_noPU_norm.h5"),
+            os.path.join(data_save_path, "mc20e_withPU_norm.h5"),
+            os.path.join(data_save_path, "mc20e_noPU_norm.h5"),
+        ]
+        dataset_str = "Run2"
+    elif args.mc23:
+        file_paths = [
+            os.path.join(data_save_path, "mc23a_withPU_norm.h5"),
+            os.path.join(data_save_path, "mc23a_noPU_norm.h5"),
+            os.path.join(data_save_path, "mc23d_withPU_norm.h5"),
+            os.path.join(data_save_path, "mc23d_noPU_norm.h5"),
+            os.path.join(data_save_path, "mc23e_withPU_norm.h5"),
+            os.path.join(data_save_path, "mc23e_noPU_norm.h5"),
+        ]
+        dataset_str = "Run3"
+    else:
+        raise ValueError("No dataset selected")
+
+    # Define model type
+    if args.DNN1:
+        model_str = "DNN1"
+    elif args.DNN2:
+        model_str = "DNN2"
+    else:
+        raise ValueError("No model type selected")
+
     if args.train:
-        # Load data
-        if args.mc20a:
-            X, y = load_testrun_data()
-        elif args.mc20:
-            X, y = load_full_data(20)
-        elif args.mc23:
-            X, y = load_full_data(23)
-
-        # Apply train test split
-        X_train, X_test, y_train, y_test = train_test_split(
-            X,
-            y,
-            test_size=TEST_SIZE,
+        # Create generators
+        train_generator = HDF5DataGenerator(
+            file_paths=file_paths,
+            feature_keys=feature_keys,
+            batch_size=BATCH_SIZE,
+            shuffle=True,
+            mode="train",
+            val_split=TEST_SIZE,
             random_state=RANDOM_STATE,
-            stratify=y,
+        )
+        val_generator = HDF5DataGenerator(
+            file_paths=file_paths,
+            feature_keys=feature_keys,
+            batch_size=BATCH_SIZE,
+            shuffle=True,
+            mode="val",
+            val_split=TEST_SIZE,
+            random_state=RANDOM_STATE,
         )
 
-        # Build DNN model
-        dnn_model = build_dnn_model(X_train.shape[1], lr=1e-3)
-
-        # Reweighting
-        weights = class_weight.compute_class_weight(
-            class_weight="balanced", classes=np.unique(y_train), y=y_train
-        )
-
-        class_weights = {0: weights[0], 1: weights[1]}
+        # Build model
+        dnn_model = build_dnn_model(train_generator.input_dim, lr=1e-3)
 
         # Early stopping
         early_stop = keras.callbacks.EarlyStopping(
@@ -282,29 +316,26 @@ def main():
         )
 
         # Train model
-        print("Train model...")
+        print("Training model...")
         history = dnn_model.fit(
-            X_train,
-            y_train,
-            validation_split=0.25,
+            train_generator,
+            validation_data=val_generator,
             epochs=EPOCHS,
-            batch_size=BATCH_SIZE,
-            class_weight=class_weights,
             callbacks=[early_stop],
         )
 
-        # Save history to h5
+        # Save model and history
         output_directory = os.path.join(output_path, "ML", dataset_str)
         ensure_dir_exists(output_directory)
+
         history_path = os.path.join(output_directory, f"{model_str}_history.h5")
         with h5py.File(history_path, "w") as f:
             for key, values in history.history.items():
                 f.create_dataset(key, data=values)
 
-        # Save model
-        save_path = os.path.join(output_directory, f"{model_str}.h5")
-        dnn_model.save(save_path)
-        print(f"Model saved to {save_path}...")
+        model_path = os.path.join(output_directory, f"{model_str}.h5")
+        dnn_model.save(model_path)
+        print(f"Model saved to {model_path}.")
 
         # Plot training history
         plot_training_history(history)
@@ -315,58 +346,52 @@ def main():
         model = keras.models.load_model(model_path, compile=True)
 
         if model is None:
-            print("No model found...")
+            print("No model found.")
             return
 
-        # Load test data
-        if args.mc20a:
-            X, y = load_testrun_data()
-        elif args.mc20:
-            X, y = load_full_data(20)
-        elif args.mc23:
-            X, y = load_full_data(23)
-
-        # Split the data
-        _, X_test, _, y_test = train_test_split(
-            X,
-            y,
-            test_size=TEST_SIZE,
+        # Create test generator
+        test_generator = HDF5DataGenerator(
+            file_paths=file_paths,
+            feature_keys=feature_keys,
+            batch_size=BATCH_SIZE,
+            shuffle=False,
+            mode="test",
+            val_split=TEST_SIZE,
             random_state=RANDOM_STATE,
-            stratify=y,
         )
 
         # Evaluate model
-        print("Evaluate model on test set...")
-        loss, accuracy, auc = model.evaluate(X_test, y_test, verbose=1)
+        print("Evaluating model on test set...")
+        loss, accuracy, auc = model.evaluate(test_generator, verbose=1)
         print(f"Test Loss: {loss:.4f}")
         print(f"Test Accuracy: {accuracy:.4f}")
         print(f"Test AUC: {auc:.4f}")
 
-        # Predict and save output scores
-        print("Generate predictions...")
-        y_pred = model.predict(X_test, verbose=1)
+        # Predict and save predictions
+        print("Generating predictions...")
+        y_pred = model.predict(test_generator, verbose=1)
+
+        # Load true labels manually
+        y_true = np.concatenate([y for _, y in test_generator], axis=0)
 
         output_dir = os.path.join(output_path, "ML")
         ensure_dir_exists(output_dir)
         predictions_path = os.path.join(output_dir, "predictions.h5")
 
         with h5py.File(predictions_path, "w") as f:
-            f.create_dataset("y_true", data=y_test)
+            f.create_dataset("y_true", data=y_true)
             f.create_dataset("y_pred", data=y_pred)
 
         print(f"Predictions saved to {predictions_path}")
 
     if args.plot:
-        print("Load training history...")
-        # Path to the history file
+        print("Loading training history...")
         output_directory = os.path.join(output_path, "ML", dataset_str)
         history_path = os.path.join(output_directory, f"{model_str}_history.h5")
 
-        # Load the training history
         with h5py.File(history_path, "r") as f:
             history = {key: list(f[key][:]) for key in f.keys()}
 
-        # Plot training history
         plot_training_history(type("History", (), {"history": history}))
 
 
