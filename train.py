@@ -43,7 +43,7 @@ feature_keys = [
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
 BATCH_SIZE = 512
-EPOCHS = 10
+EPOCHS = 3
 
 
 # ---------- Argument Parser ---------- #
@@ -251,7 +251,6 @@ def main():
             os.path.join(data_save_path, "mc20a_withPU_norm.h5"),
             os.path.join(data_save_path, "mc20a_noPU_norm.h5"),
         ]
-        dataset_str = "Run2a"
     elif args.mc20:
         file_paths = [
             os.path.join(data_save_path, "mc20a_withPU_norm.h5"),
@@ -261,7 +260,6 @@ def main():
             os.path.join(data_save_path, "mc20e_withPU_norm.h5"),
             os.path.join(data_save_path, "mc20e_noPU_norm.h5"),
         ]
-        dataset_str = "Run2"
     elif args.mc23:
         file_paths = [
             os.path.join(data_save_path, "mc23a_withPU_norm.h5"),
@@ -271,17 +269,9 @@ def main():
             os.path.join(data_save_path, "mc23e_withPU_norm.h5"),
             os.path.join(data_save_path, "mc23e_noPU_norm.h5"),
         ]
-        dataset_str = "Run3"
     else:
         raise ValueError("No dataset selected")
 
-    # Define model type
-    if args.DNN1:
-        model_str = "DNN1"
-    elif args.DNN2:
-        model_str = "DNN2"
-    else:
-        raise ValueError("No model type selected")
 
     if args.train:
         # Create generators
