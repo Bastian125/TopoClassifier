@@ -124,7 +124,7 @@ def main():
     ensure_dir_exists(output_dir)
 
     if not args.test_campaign:
-        print("Starting training on:", args.train_campaign)
+        print("Start training on:", args.train_campaign)
 
         file_paths = [
             os.path.join(data_save_path, f"{args.train_campaign}_withPU_norm.h5"),
