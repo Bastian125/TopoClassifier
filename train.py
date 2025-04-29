@@ -109,13 +109,78 @@ else:
 
 
 # ---------- Helper Functions ---------- #
-def build_dnn_model(input_dim, lr): ...
+def build_dnn_model(input_dim, lr):
+    print("Building DNN model...")
+    model = models.Sequential(
+        [
+            layers.Input(shape=(input_dim,)),
+            layers.Dense(512, activation="relu"),
+            layers.BatchNormalization(),
+            layers.Dense(256, activation="relu"),
+            layers.BatchNormalization(),
+            layers.Dense(128, activation="relu"),
+            layers.BatchNormalization(),
+            layers.Dense(64, activation="relu"),
+            layers.BatchNormalization(),
+            layers.Dropout(0.3),
+            layers.Dense(32, activation="relu"),
+            layers.BatchNormalization(),
+            layers.Dropout(0.3),
+            layers.Dense(8, activation="relu"),
+            layers.BatchNormalization(),
+            layers.Dense(1, activation="sigmoid"),
+        ]
+    )
+    model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=lr),
+        loss="binary_crossentropy",
+        metrics=["accuracy", tf.keras.metrics.AUC(name="auc")],
+    )
+    return model
 
 
-def plot_training_history(history): ...
+def plot_training_history(history):
+    print("Plotting training history...")
+    fig, axs = plt.subplots(
+        2, 1, figsize=(10, 8), gridspec_kw={"height_ratios": [3, 1]}
+    )
+
+    axs[0].plot(history["loss"], label="Training Loss")
+    axs[0].plot(history["val_loss"], label="Validation Loss")
+    axs[0].set_ylabel("Loss")
+    axs[0].legend()
+    axs[0].grid(True)
+
+    loss_diff = np.array(history["val_loss"]) - np.array(history["loss"])
+    axs[1].plot(loss_diff, label="val_loss - loss", linestyle="--")
+    axs[1].axhline(0, color="black", linewidth=0.5)
+    axs[1].set_ylabel("Loss Diff")
+    axs[1].set_xlabel("Epoch")
+    axs[1].grid(True)
+
+    output_dir = os.path.join(output_path, "ML", train_dataset_str)
+    ensure_dir_exists(output_dir)
+    save_path = os.path.join(output_dir, f"{model_str}_training_history.pdf")
+    plt.savefig(save_path)
+    plt.close()
+    print(f"Training history saved to {save_path}")
 
 
-def plot_roc_curve(y_true, y_pred, save_path): ...
+def plot_roc_curve(y_true, y_pred, save_path):
+    fpr, tpr, thresholds = roc_curve(y_true, y_pred)
+    roc_auc = auc(fpr, tpr)
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(fpr, tpr, label=f"ROC curve (area = {roc_auc:.4f})")
+    plt.plot([0, 1], [0, 1], "k--")
+    plt.xlabel("False Positive Rate")
+    plt.ylabel("True Positive Rate")
+    plt.title("Receiver Operating Characteristic")
+    plt.legend(loc="lower right")
+    plt.grid(True)
+    plt.savefig(save_path)
+    plt.close()
+    print(f"ROC curve saved to {save_path}")
 
 
 # ---------- Main Function ---------- #
