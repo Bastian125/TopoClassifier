@@ -5,4 +5,4 @@ condor/
 __pycache__/
 
 # Ignore predictions
-output/ML/predictions.h5
+output/ML/Run2a/test_on_mc20d
