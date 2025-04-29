@@ -40,7 +40,7 @@ feature_keys = [
 TEST_SIZE = 0.2
 RANDOM_STATE = 42
 BATCH_SIZE = 512
-EPOCHS = 3
+EPOCHS = 50
 
 # ---------- Argument Parser ---------- #
 parser = argparse.ArgumentParser(
@@ -85,14 +85,17 @@ args = parser.parse_args()
 
 # --------- Define Dataset and Model Type --------- #
 def campaign_to_dataset(campaign):
-    if campaign == "mc20a":
-        return "Run2a"
-    elif campaign.startswith("mc20"):
-        return "Run2"
-    elif campaign.startswith("mc23"):
-        return "Run3"
-    else:
+    mapping = {
+        "mc20a": "Run2a",
+        "mc20d": "Run2d",
+        "mc20e": "Run2e",
+        "mc23a": "Run3a",
+        "mc23d": "Run3d",
+        "mc23e": "Run3e",
+    }
+    if campaign not in mapping:
         raise ValueError("Unknown campaign: " + campaign)
+    return mapping[campaign]
 
 
 train_dataset_str = campaign_to_dataset(args.train_campaign)
@@ -149,11 +152,16 @@ def main():
 
         model = build_dnn_model(train_gen.input_dim, lr=1e-3)
 
+        early_stop = keras.callbacks.EarlyStopping(
+            monitor="val_loss", patience=2, restore_best_weights=True
+        )
+
         history = model.fit(
             train_gen,
             validation_data=val_gen,
             epochs=EPOCHS,
             verbose=1,
+            callbacks=[early_stop],
         )
 
         full_history = history.history
