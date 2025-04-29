@@ -41,7 +41,7 @@ class HDF5DataGenerator(tf.keras.utils.Sequence):
     def _load_data_from_file(self, path):
         with h5py.File(path, "r") as f:
             X = np.stack([f[key][:] for key in self.feature_keys], axis=1)
-            y = f["label"][:]  # Load the 'label' dataset from the file
+            y = f["label"][:]
         return X, y
 
     def _load_and_split_data(self):
