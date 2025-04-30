@@ -218,7 +218,10 @@ def main():
         model = build_dnn_model(train_gen.input_dim, lr=1e-3)
 
         early_stop = keras.callbacks.EarlyStopping(
-            monitor="val_loss", patience=2, restore_best_weights=True
+            monitor="val_loss",
+            patience=2,
+            restore_best_weights=True,
+            start_from_epoch=10,
         )
 
         history = model.fit(
