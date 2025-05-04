@@ -1,5 +1,6 @@
 """
 Dataloader that either loads MC20a as Run2a, or Run2d, Run2e or Run3a, Run3d, Run3e.
+Updated to use pre-split HDF5 files: *_train.h5, *_val.h5, *_test.h5.
 """
 
 # ---------- Imports ---------- #
@@ -7,66 +8,32 @@ import os
 import h5py
 import numpy as np
 import tensorflow as tf
-from sklearn.model_selection import train_test_split
+
 
 # ---------- Data Loader Class ---------- #
 class HDF5DataGenerator(tf.keras.utils.Sequence):
     def __init__(
         self,
-        file_paths,
+        file_path,
         feature_keys,
         batch_size=512,
         shuffle=True,
-        mode="train",
-        val_split=0.2,
-        random_state=42,
     ):
-        self.file_paths = file_paths
+        self.file_path = file_path
         self.feature_keys = feature_keys
         self.batch_size = batch_size
         self.shuffle = shuffle
-        self.mode = mode
-        self.val_split = val_split
-        self.random_state = random_state
-        self.data, self.labels = self._load_and_split_data()
+        self.data, self.labels = self._load_data()
         self.input_dim = self.data.shape[1]
         self.indices = np.arange(len(self.labels))
         if self.shuffle:
             np.random.shuffle(self.indices)
 
-    def _load_data_from_file(self, path):
-        with h5py.File(path, "r") as f:
+    def _load_data(self):
+        with h5py.File(self.file_path, "r") as f:
             X = np.stack([f[key][:] for key in self.feature_keys], axis=1)
             y = f["label"][:]
         return X, y
-
-    def _load_and_split_data(self):
-        X_all, y_all = [], []
-        for path in self.file_paths:
-            X, y = self._load_data_from_file(path)
-            X_all.append(X)
-            y_all.append(y)
-        X_all = np.concatenate(X_all, axis=0)
-        y_all = np.concatenate(y_all, axis=0)
-
-        if self.mode == "all":
-            return X_all, y_all
-
-        # Stratified train-val split only
-        X_train, X_val, y_train, y_val = train_test_split(
-            X_all,
-            y_all,
-            test_size=self.val_split,
-            stratify=y_all,
-            random_state=self.random_state,
-        )
-
-        if self.mode == "train":
-            return X_train, y_train
-        elif self.mode == "val":
-            return X_val, y_val
-        else:
-            raise ValueError("mode must be 'train', 'val', or 'all'")
 
     def __len__(self):
         return int(np.ceil(len(self.labels) / self.batch_size))
