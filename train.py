@@ -38,7 +38,7 @@ feature_keys = [
 ]
 
 BATCH_SIZE = 512
-EPOCHS = 50
+EPOCHS = 400
 
 # ---------- Argument Parser ---------- #
 parser = argparse.ArgumentParser(
