@@ -186,54 +186,72 @@ def main():
     output_dir = os.path.join(output_path, "ML", train_dataset_str)
     ensure_dir_exists(output_dir)
 
-    print("Start training on:", args.train_campaign)
+    if not args.test_campaign and not args.plot:
+        print("Start training on:", args.train_campaign)
 
-    train_file = os.path.join(data_save_path, f"{args.train_campaign}_norm_train.h5")
-    val_file = os.path.join(data_save_path, f"{args.train_campaign}_norm_val.h5")
+        train_file = os.path.join(
+            data_save_path, f"{args.train_campaign}_norm_train.h5"
+        )
+        val_file = os.path.join(data_save_path, f"{args.train_campaign}_norm_val.h5")
 
-    train_gen = HDF5DataGenerator(
-        file_path=train_file,
-        feature_keys=feature_keys,
-        batch_size=BATCH_SIZE,
-        shuffle=True,
-    )
-    val_gen = HDF5DataGenerator(
-        file_path=val_file,
-        feature_keys=feature_keys,
-        batch_size=BATCH_SIZE,
-        shuffle=True,
-    )
+        train_gen = HDF5DataGenerator(
+            file_path=train_file,
+            feature_keys=feature_keys,
+            batch_size=BATCH_SIZE,
+            shuffle=True,
+        )
+        val_gen = HDF5DataGenerator(
+            file_path=val_file,
+            feature_keys=feature_keys,
+            batch_size=BATCH_SIZE,
+            shuffle=True,
+        )
 
-    model = build_dnn_model(train_gen.input_dim, lr=1e-3)
+        model = build_dnn_model(train_gen.input_dim, lr=1e-3)
 
-    early_stop = keras.callbacks.EarlyStopping(
-        monitor="val_loss",
-        patience=20,
-        restore_best_weights=True,
-        start_from_epoch=100,
-    )
+        early_stop = keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            patience=20,
+            restore_best_weights=True,
+            start_from_epoch=100,
+        )
 
-    history = model.fit(
-        train_gen,
-        validation_data=val_gen,
-        epochs=EPOCHS,
-        verbose=1,
-        callbacks=[early_stop],
-    )
+        history = model.fit(
+            train_gen,
+            validation_data=val_gen,
+            epochs=EPOCHS,
+            verbose=1,
+            callbacks=[early_stop],
+        )
 
-    full_history = history.history
+        full_history = history.history
 
-    model.save(os.path.join(output_dir, f"{model_str}.h5"))
-    print(f"Model saved at {output_dir}")
+        model.save(os.path.join(output_dir, f"{model_str}.h5"))
+        print(f"Model saved at {output_dir}")
 
-    history_path = os.path.join(output_dir, f"{model_str}_history.h5")
-    with h5py.File(history_path, "w") as f:
-        for key, values in full_history.items():
-            f.create_dataset(key, data=values)
-    print(f"Training history saved at {history_path}")
+        history_path = os.path.join(output_dir, f"{model_str}_history.h5")
+        with h5py.File(history_path, "w") as f:
+            for key, values in full_history.items():
+                f.create_dataset(key, data=values)
+        print(f"Training history saved at {history_path}")
+        plot_training_history(full_history)
 
     if args.plot:
-        plot_training_history(full_history)
+        # Load and plot training history from saved HDF5
+        history_path = os.path.join(
+            output_path, "ML", train_dataset_str, f"{model_str}_history.h5"
+        )
+        if not os.path.exists(history_path):
+            print(f"Error: No training history found at {history_path}")
+        else:
+            print(f"Loading training history from {history_path}")
+            history_data = {}
+            with h5py.File(history_path, "r") as f:
+                for key in f:
+                    history_data[key] = f[key][()]
+            # Convert bytes to str keys if needed (optional)
+            history_data = {k: v.tolist() for k, v in history_data.items()}
+            plot_training_history(history_data)
 
     if args.test_campaign:
         test_dataset_str = campaign_to_dataset(args.test_campaign)
