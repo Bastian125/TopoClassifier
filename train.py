@@ -38,7 +38,8 @@ feature_keys = [
     "cluster_ISOLATION",
 ]
 
-BATCH_SIZE = 512
+LEARNING_RATE = 1e-5
+BATCH_SIZE = 1024
 EPOCHS = 400
 
 # ---------- Argument Parser ---------- #
@@ -220,7 +221,7 @@ def main():
         class_weights = {0: weights[0], 1: weights[1]}
         print(f"Class weights: {class_weights}")
 
-        model = build_dnn_model(train_gen.input_dim, lr=1e-3)
+        model = build_dnn_model(train_gen.input_dim, lr=LEARNING_RATE)
 
         early_stop = keras.callbacks.EarlyStopping(
             monitor="val_loss",

@@ -159,7 +159,7 @@ def main():
 
     if args.test:
         print("Test mode activated...")
-        tag = "mc20e"
+        tag = "mc23e"
         df_withpu = load_and_process(
             os.path.join(root_path, f"{tag}_withPU.root"),
             label=0,
