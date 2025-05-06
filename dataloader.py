@@ -1,16 +1,10 @@
-"""
-Dataloader that either loads MC20a as Run2a, or Run2d, Run2e or Run3a, Run3d, Run3e.
-Updated to use pre-split HDF5 files: *_train.h5, *_val.h5, *_test.h5.
-"""
-
-# ---------- Imports ---------- #
 import os
 import h5py
 import numpy as np
 import tensorflow as tf
+from sklearn.model_selection import train_test_split
 
 
-# ---------- Data Loader Class ---------- #
 class HDF5DataGenerator(tf.keras.utils.Sequence):
     def __init__(
         self,
@@ -23,6 +17,7 @@ class HDF5DataGenerator(tf.keras.utils.Sequence):
         self.feature_keys = feature_keys
         self.batch_size = batch_size
         self.shuffle = shuffle
+
         self.data, self.labels = self._load_data()
         self.input_dim = self.data.shape[1]
         self.indices = np.arange(len(self.labels))

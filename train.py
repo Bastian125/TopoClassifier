@@ -14,6 +14,7 @@ import tensorflow as tf
 from tensorflow import keras
 from keras import layers, models
 from sklearn.metrics import roc_curve, auc
+from sklearn.utils import class_weight
 
 from config import data_save_path, output_path
 from io_utils import ensure_dir_exists
@@ -200,12 +201,24 @@ def main():
             batch_size=BATCH_SIZE,
             shuffle=True,
         )
+
         val_gen = HDF5DataGenerator(
             file_path=val_file,
             feature_keys=feature_keys,
             batch_size=BATCH_SIZE,
-            shuffle=True,
+            shuffle=False,
         )
+
+        # Load full labels for reweighting
+        with h5py.File(train_file, "r") as f:
+            y_train = f["label"][:]
+
+        # Compute class weights
+        weights = class_weight.compute_class_weight(
+            class_weight="balanced", classes=np.unique(y_train), y=y_train
+        )
+        class_weights = {0: weights[0], 1: weights[1]}
+        print(f"Class weights: {class_weights}")
 
         model = build_dnn_model(train_gen.input_dim, lr=1e-3)
 
@@ -221,6 +234,7 @@ def main():
             validation_data=val_gen,
             epochs=EPOCHS,
             verbose=1,
+            class_weight=class_weights,
             callbacks=[early_stop],
         )
 
