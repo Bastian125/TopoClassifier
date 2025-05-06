@@ -27,7 +27,11 @@ from io_utils import ensure_dir_exists
 parser = argparse.ArgumentParser(description="Perform preprocessing of root files.")
 mode_group = parser.add_mutually_exclusive_group(required=True)
 mode_group.add_argument(
-    "--test", action="store_true", help="Run in test mode (process only mc20e)"
+    "--campaign",
+    type=str,
+    required=True,
+    choices=["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"],
+    help="Specify the campaign used for preprocessing.",
 )
 mode_group.add_argument(
     "--full", action="store_true", help="Run full preprocessing on all datasets"
@@ -157,9 +161,9 @@ def main():
     """
     apply_norm = not args.no_normalisation
 
-    if args.test:
+    if args.campaign:
         print("Test mode activated...")
-        tag = "mc23e"
+        tag = args.campaign
         df_withpu = load_and_process(
             os.path.join(root_path, f"{tag}_withPU.root"),
             label=0,
