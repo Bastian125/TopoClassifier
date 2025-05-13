@@ -1,46 +1,31 @@
-import os
 import h5py
 import numpy as np
-import tensorflow as tf
-from sklearn.model_selection import train_test_split
+
+import torch
+import tqdm
+from torch.utils.data import Dataset
 
 
-class HDF5DataGenerator(tf.keras.utils.Sequence):
-    def __init__(
-        self,
-        file_path,
-        feature_keys,
-        batch_size=512,
-        shuffle=True,
-    ):
+class HDF5Dataset(Dataset):
+    """
+    PyTorch dataset for loading normalized ATLAS features from an HDF5 file.
+    Each sample includes a set of features and a binary label.
+    """
+
+    def __init__(self, file_path, feature_keys):
         self.file_path = file_path
         self.feature_keys = feature_keys
-        self.batch_size = batch_size
-        self.shuffle = shuffle
 
-        self.data, self.labels = self._load_data()
-        self.input_dim = self.data.shape[1]
-        self.indices = np.arange(len(self.labels))
-        if self.shuffle:
-            np.random.shuffle(self.indices)
-
-    def _load_data(self):
+        # Load entire dataset into memory
         with h5py.File(self.file_path, "r") as f:
-            X = np.stack([f[key][:] for key in self.feature_keys], axis=1)
-            y = f["label"][:]
-        return X, y
+            self.data = torch.tensor(
+                np.stack([f[key][:] for key in self.feature_keys], axis=1),
+                dtype=torch.float32,
+            )
+            self.labels = torch.tensor(f["label"][:], dtype=torch.float32)
 
     def __len__(self):
-        return int(np.ceil(len(self.labels) / self.batch_size))
+        return len(self.labels)
 
     def __getitem__(self, idx):
-        batch_indices = self.indices[
-            idx * self.batch_size : (idx + 1) * self.batch_size
-        ]
-        X_batch = self.data[batch_indices]
-        y_batch = self.labels[batch_indices]
-        return X_batch, y_batch
-
-    def on_epoch_end(self):
-        if self.shuffle:
-            np.random.shuffle(self.indices)
+        return self.data[idx], self.labels[idx]
