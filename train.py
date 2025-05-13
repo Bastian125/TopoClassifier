@@ -268,22 +268,48 @@ def plot_training_history(history):
     print(f"Training history saved to {save_path}")
 
 
-def plot_roc_curve(y_true, y_pred, save_path):
-    """Plot and save ROC curve from predictions."""
-    fpr, tpr, _ = roc_curve(y_true, y_pred)
+def plot_roc_curve(y_true, y_pred, prefix_path):
+    """
+    Plot and save ROC curve with best threshold using Youden's J statistic.
+    Saves both PDF and TXT file with threshold and metrics.
+    """
+    fpr, tpr, thresholds = roc_curve(y_true, y_pred)
     roc_auc = auc(fpr, tpr)
 
+    # Best threshold by maximizing TPR - FPR
+    j_scores = tpr - fpr
+    j_best_idx = np.argmax(j_scores)
+    best_threshold = thresholds[j_best_idx]
+    best_fpr = fpr[j_best_idx]
+    best_tpr = tpr[j_best_idx]
+
+    # Plot
     plt.figure(figsize=(8, 6))
-    plt.plot(fpr, tpr, label=f"ROC curve (area = {roc_auc:.4f})")
+    plt.plot(fpr, tpr, label=f"ROC curve (AUC = {roc_auc:.4f})")
     plt.plot([0, 1], [0, 1], "k--")
+    plt.scatter(
+        best_fpr, best_tpr, color="red", label=f"Best threshold = {best_threshold:.4f}"
+    )
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
     plt.title("Receiver Operating Characteristic")
     plt.legend(loc="lower right")
     plt.grid(True)
-    plt.savefig(save_path)
+
+    pdf_path = prefix_path + "_roc_curve.pdf"
+    txt_path = prefix_path + "_threshold.txt"
+
+    plt.savefig(pdf_path)
     plt.close()
-    print(f"ROC curve saved to {save_path}")
+
+    with open(txt_path, "w") as f:
+        f.write(f"Best threshold: {best_threshold:.6f}\n")
+        f.write(f"True Positive Rate: {best_tpr:.6f}\n")
+        f.write(f"False Positive Rate: {best_fpr:.6f}\n")
+        f.write(f"AUC: {roc_auc:.6f}\n")
+
+    print(f"ROC curve saved to {pdf_path}")
+    print(f"Best threshold saved to {txt_path}")
 
 
 def train_model(model, train_loader, val_loader, criterion, optimizer):
@@ -411,6 +437,13 @@ def main():
         with h5py.File(os.path.join(output_dir, f"{model_str}_history.h5"), "w") as f:
             for key, values in history.items():
                 f.create_dataset(key, data=values)
+
+        # Get train ROC, threshold and training history
+        y_true_train, y_pred_train = get_predictions(model, train_loader)
+        roc_prefix_train = os.path.join(
+            output_dir, f"{model_str}_on_{args.train_campaign}_train"
+        )
+        plot_roc_curve(y_true_train, y_pred_train, prefix_path=roc_prefix_train)
         plot_training_history(history)
 
     if args.test_campaign:
@@ -451,10 +484,10 @@ def main():
             f.create_dataset("y_true", data=y_true)
             f.create_dataset("y_pred", data=y_pred)
 
-        roc_path = os.path.join(
-            test_out_dir, f"{model_str}_on_{args.test_campaign}_roc_curve.pdf"
+        roc_prefix_test = os.path.join(
+            test_out_dir, f"{model_str}_on_{args.test_campaign}"
         )
-        plot_roc_curve(y_true, y_pred, save_path=roc_path)
+        plot_roc_curve(y_true, y_pred, prefix_path=roc_prefix_test)
 
     if args.plot:
         history_path = os.path.join(output_dir, f"{model_str}_history.h5")
