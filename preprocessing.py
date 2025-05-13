@@ -110,11 +110,14 @@ def split_data_full(df):
     return train_df, val_df, test_df
 
 
-def normalize_data(train_df, val_df, test_df):
+def normalize_data(train_df, val_df, test_df, tag):
     """
     Apply log and standard normalization using statistics from the training set.
     Also applies cubic root transformation to cluster_time.
+    Saves normalization statistics to a .txt file.
     """
+    stats_lines = [f"Normalization statistics for {tag}\n"]
+
     for feature in log_features:
         x_train = train_df[feature]
         min_val = x_train.min()
@@ -123,6 +126,7 @@ def normalize_data(train_df, val_df, test_df):
         train_df[feature] = np.log10(x_train + shift)
         val_df[feature] = np.log10(val_df[feature] + shift)
         test_df[feature] = np.log10(test_df[feature] + shift)
+        stats_lines.append(f"{feature} (log): shift = {shift:.6e}\n")
 
     for feature in normal_features:
         mean = train_df[feature].mean()
@@ -130,16 +134,23 @@ def normalize_data(train_df, val_df, test_df):
         train_df[feature] = (train_df[feature] - mean) / std
         val_df[feature] = (val_df[feature] - mean) / std
         test_df[feature] = (test_df[feature] - mean) / std
+        stats_lines.append(f"{feature}: mean = {mean:.6f}, std = {std:.6f}\n")
 
     x_train_time = np.abs(train_df["cluster_time"]) ** (1 / 3) * np.sign(
         train_df["cluster_time"]
     )
     mean = x_train_time.mean()
     std = x_train_time.std()
-
     for df in [train_df, val_df, test_df]:
         x = np.abs(df["cluster_time"]) ** (1 / 3) * np.sign(df["cluster_time"])
         df["cluster_time"] = (x - mean) / std
+    stats_lines.append(f"cluster_time (cbrt): mean = {mean:.6f}, std = {std:.6f}\n")
+
+    # Save stats to txt
+    stats_path = os.path.join(save_path, f"{tag}_norm_stats.txt")
+    with open(stats_path, "w") as f:
+        f.writelines(stats_lines)
+    print(f"Saved normalization stats to {stats_path}")
 
 
 def save_split(df, base_name, tag):
@@ -175,7 +186,7 @@ def main():
         df_combined = pd.concat([df_withpu, df_nopu], ignore_index=True)
         train_df, val_df, test_df = split_data_full(df_combined)
         if apply_norm:
-            normalize_data(train_df, val_df, test_df)
+            normalize_data(train_df, val_df, test_df, tag)
             tag_suffix = "norm"
         else:
             tag_suffix = "raw"
@@ -201,7 +212,7 @@ def main():
             df_combined = pd.concat([df_withpu, df_nopu], ignore_index=True)
             train_df, val_df, test_df = split_data_full(df_combined)
             if apply_norm:
-                normalize_data(train_df, val_df, test_df)
+                normalize_data(train_df, val_df, test_df, tag)
                 tag_suffix = "norm"
             else:
                 tag_suffix = "raw"
