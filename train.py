@@ -209,7 +209,7 @@ class TunedDNNModel(nn.Module):
     """
 
     def __init__(self, input_dim):
-        super(DNNModel, self).__init__()
+        super(TunedDNNModel, self).__init__()
         self.model = nn.Sequential(
             nn.Linear(input_dim, 512),
             nn.SiLU(),
