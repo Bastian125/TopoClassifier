@@ -22,7 +22,7 @@ from tqdm import tqdm
 
 from config import data_save_path, output_path
 from io_utils import ensure_dir_exists
-from dataloader_torch import HDF5Dataset
+from dataloader import HDF5Dataset
 
 # ---------- File Config ---------- #
 feature_keys = [
@@ -42,8 +42,10 @@ feature_keys = [
     "cluster_ISOLATION",
 ]
 
-LEARNING_RATE = 1e-3
-BATCH_SIZE = 512
+LEARNING_RATE_RUN2 = 1e-3
+LEARNING_RATE_RUN3 = 1e-5
+BATCH_SIZE_RUN2 = 512
+BATCH_SIZE_RUN3 = 1024
 EPOCHS = 400
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -75,12 +77,12 @@ parser.add_argument(
 
 model_group = parser.add_mutually_exclusive_group(required=True)
 model_group.add_argument(
-    "--DNN1",
+    "--DNN",
     action="store_true",
     help="DNN model that classifies hard-scatter and pile-up clusters.",
 )
 model_group.add_argument(
-    "--DNN2",
+    "--TunedDNN",
     action="store_true",
     help="DNN model that classifies pile-up only and mixed clusters.",
 )
@@ -105,7 +107,61 @@ def campaign_to_dataset(campaign):
 
 
 train_dataset_str = campaign_to_dataset(args.train_campaign)
-model_str = "DNN1" if args.DNN1 else "DNN2"
+model_str = "DNN" if args.DNN else "TunedDNN"
+
+# Set learning rate and batch size depending on Run2 or Run3
+if "Run2" in train_dataset_str:
+    LEARNING_RATE = LEARNING_RATE_RUN2
+    BATCH_SIZE = BATCH_SIZE_RUN2
+else:
+    LEARNING_RATE = LEARNING_RATE_RUN3
+    BATCH_SIZE = BATCH_SIZE_RUN3
+
+
+# ---------- Custom Activation Functions ---------- #
+class OffsetTanh(nn.Module):
+    """
+    Custom activation: f(x) = 2 * (tanh(x) + 1)
+    Maps input to the range (0, 4), smooth and monotonic.
+    """
+
+    def forward(self, x):
+        return 2 * (torch.tanh(x) + 1)
+
+
+# ---------- Custom Loss Functions ---------- #
+class LGKLoss(nn.Module):
+    """
+    LGK Loss as defined:
+    L = -1/(sqrt(2πh)) * exp[-(1/(2h)) * ((R_pred / R_true - 1)^2)] + α * |(R_pred / R_true - 1)|
+
+    Parameters:
+        h (float): Bandwidth-like parameter (controls Gaussian decay)
+        alpha (float): Weight of the L1 penalty term
+    """
+
+    def __init__(self, h=0.1, alpha=1.0):
+        super(LGKLoss, self).__init__()
+        self.h = h
+        self.alpha = alpha
+        self.const = 1.0 / torch.sqrt(torch.tensor(2 * torch.pi * h))
+
+    def forward(self, response_pred, response_true):
+        """
+        Args:
+            response_pred (Tensor): Predicted response (R_clus^ML), shape (N,)
+            response_true (Tensor): Target response (R_clus^EM), shape (N,)
+        Returns:
+            loss (Tensor): Scalar loss value
+        """
+        ratio = response_pred / response_true
+        delta = ratio - 1.0
+
+        gauss_term = -self.const * torch.exp(-0.5 * delta**2 / self.h)
+        l1_term = self.alpha * torch.abs(delta)
+
+        loss = gauss_term + l1_term
+        return loss.mean()
 
 
 # ---------- Model Definition ---------- #
@@ -139,6 +195,44 @@ class DNNModel(nn.Module):
             nn.ReLU(),
             nn.BatchNorm1d(8),
             nn.Linear(8, 1),
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
+
+class TunedDNNModel(nn.Module):
+    """
+    Tuned Deep Neural Network model for binary classification.
+    Uses swish activation function after each hidden layer and a 2*(tanh(x)+1) different output layer.
+    Final layer does NOT include sigmoid; use BCEWithLogitsLoss instead.
+    """
+
+    def __init__(self, input_dim):
+        super(DNNModel, self).__init__()
+        self.model = nn.Sequential(
+            nn.Linear(input_dim, 512),
+            nn.SiLU(),
+            nn.BatchNorm1d(512),
+            nn.Linear(512, 256),
+            nn.SiLU(),
+            nn.BatchNorm1d(256),
+            nn.Linear(256, 128),
+            nn.SiLU(),
+            nn.BatchNorm1d(128),
+            nn.Linear(128, 64),
+            nn.SiLU(),
+            nn.BatchNorm1d(64),
+            nn.Dropout(0.3),
+            nn.Linear(64, 32),
+            nn.SiLU(),
+            nn.BatchNorm1d(32),
+            nn.Dropout(0.3),
+            nn.Linear(32, 8),
+            nn.SiLU(),
+            nn.BatchNorm1d(8),
+            nn.Linear(8, 1),
+            OffsetTanh(),
         )
 
     def forward(self, x):
@@ -234,7 +328,9 @@ def train_model(model, train_loader, val_loader, criterion, optimizer):
 
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            best_model_path = os.path.join(output_path, "ML", train_dataset_str, f"{model_str}_best.pt")
+            best_model_path = os.path.join(
+                output_path, "ML", train_dataset_str, f"{model_str}_best.pt"
+            )
             torch.save(model.state_dict(), best_model_path)
             wait = 0
         else:
@@ -281,7 +377,7 @@ def main():
             train_dataset,
             batch_size=BATCH_SIZE,
             shuffle=True,
-            num_workers=3,
+            num_workers=4,
             pin_memory=True,
             persistent_workers=True,
         )
@@ -302,8 +398,9 @@ def main():
         pos_weight = class_weights[1] / class_weights[0]
 
         model = DNNModel(input_dim).to(DEVICE)
-        criterion = nn.BCEWithLogitsLoss()
-        optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+        model = torch.compile(model)
+        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 
         model, history = train_model(
             model, train_loader, val_loader, criterion, optimizer
@@ -315,17 +412,6 @@ def main():
             for key, values in history.items():
                 f.create_dataset(key, data=values)
         plot_training_history(history)
-
-    if args.plot:
-        history_path = os.path.join(output_dir, f"{model_str}_history.h5")
-        if not os.path.exists(history_path):
-            print(f"Error: No training history found at {history_path}")
-        else:
-            print(f"Loading training history from {history_path}")
-            with h5py.File(history_path, "r") as f:
-                history = {k: f[k][()] for k in f}
-            history = {k: v.tolist() for k, v in history.items()}
-            plot_training_history(history)
 
     if args.test_campaign:
         test_dataset_str = campaign_to_dataset(args.test_campaign)
@@ -369,6 +455,17 @@ def main():
             test_out_dir, f"{model_str}_on_{args.test_campaign}_roc_curve.pdf"
         )
         plot_roc_curve(y_true, y_pred, save_path=roc_path)
+
+    if args.plot:
+        history_path = os.path.join(output_dir, f"{model_str}_history.h5")
+        if not os.path.exists(history_path):
+            print(f"Error: No training history found at {history_path}")
+        else:
+            print(f"Loading training history from {history_path}")
+            with h5py.File(history_path, "r") as f:
+                history = {k: f[k][()] for k in f}
+            history = {k: v.tolist() for k, v in history.items()}
+            plot_training_history(history)
 
 
 if __name__ == "__main__":
