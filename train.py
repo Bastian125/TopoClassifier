@@ -144,7 +144,6 @@ class LGKLoss(nn.Module):
         super(LGKLoss, self).__init__()
         self.h = h
         self.alpha = alpha
-        self.const = 1.0 / torch.sqrt(torch.tensor(2 * torch.pi * h))
 
     def forward(self, response_pred, response_true):
         """
@@ -154,10 +153,11 @@ class LGKLoss(nn.Module):
         Returns:
             loss (Tensor): Scalar loss value
         """
+        const = 1.0 / torch.sqrt(torch.tensor(2 * torch.pi * self.h, device=response_pred.device))
         ratio = response_pred / response_true
         delta = ratio - 1.0
 
-        gauss_term = -self.const * torch.exp(-0.5 * delta**2 / self.h)
+        gauss_term = -const * torch.exp(-0.5 * delta**2 / self.h)
         l1_term = self.alpha * torch.abs(delta)
 
         loss = gauss_term + l1_term
@@ -390,61 +390,112 @@ def main():
     if not args.test_campaign and not args.plot:
         print("Start training on:", args.train_campaign)
 
-        train_file = os.path.join(
-            data_save_path, f"{args.train_campaign}_norm_train.h5"
-        )
-        val_file = os.path.join(data_save_path, f"{args.train_campaign}_norm_val.h5")
+        if model_str == "DNN":
+            train_file = os.path.join(
+                data_save_path, f"{args.train_campaign}_norm_train.h5"
+            )
+            val_file = os.path.join(
+                data_save_path, f"{args.train_campaign}_norm_val.h5"
+            )
 
-        train_dataset = HDF5Dataset(train_file, feature_keys)
-        val_dataset = HDF5Dataset(val_file, feature_keys)
-        input_dim = train_dataset[0][0].shape[0]
+            train_dataset = HDF5Dataset(train_file, feature_keys, "label")
+            val_dataset = HDF5Dataset(val_file, feature_keys, "label")
+            input_dim = train_dataset[0][0].shape[0]
 
-        train_loader = DataLoader(
-            train_dataset,
-            batch_size=BATCH_SIZE,
-            shuffle=True,
-            num_workers=4,
-            pin_memory=True,
-            persistent_workers=True,
-        )
-        val_loader = DataLoader(
-            val_dataset,
-            batch_size=BATCH_SIZE,
-            shuffle=False,
-            num_workers=4,
-            pin_memory=True,
-            persistent_workers=True,
-        )
+            train_loader = DataLoader(
+                train_dataset,
+                batch_size=BATCH_SIZE,
+                shuffle=True,
+                num_workers=4,
+                pin_memory=True,
+                persistent_workers=True,
+            )
+            val_loader = DataLoader(
+                val_dataset,
+                batch_size=BATCH_SIZE,
+                shuffle=False,
+                num_workers=4,
+                pin_memory=True,
+                persistent_workers=True,
+            )
 
-        y_train = train_dataset.labels.numpy()
-        weights = compute_class_weight(
-            class_weight="balanced", classes=np.unique(y_train), y=y_train
-        )
-        class_weights = torch.tensor(weights, dtype=torch.float32).to(DEVICE)
-        pos_weight = class_weights[1] / class_weights[0]
+            y_train = train_dataset.labels.numpy()
+            weights = compute_class_weight(
+                class_weight="balanced", classes=np.unique(y_train), y=y_train
+            )
+            class_weights = torch.tensor(weights, dtype=torch.float32).to(DEVICE)
+            pos_weight = class_weights[1] / class_weights[0]
 
-        model = DNNModel(input_dim).to(DEVICE)
-        model = torch.compile(model)
-        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-        optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
+            model = DNNModel(input_dim).to(DEVICE)
+            model = torch.compile(model)
+            criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+            optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 
-        model, history = train_model(
-            model, train_loader, val_loader, criterion, optimizer
-        )
+            model, history = train_model(
+                model, train_loader, val_loader, criterion, optimizer
+            )
 
-        torch.save(model.state_dict(), os.path.join(output_dir, f"{model_str}.pt"))
+            torch.save(model.state_dict(), os.path.join(output_dir, f"{model_str}.pt"))
 
-        with h5py.File(os.path.join(output_dir, f"{model_str}_history.h5"), "w") as f:
-            for key, values in history.items():
-                f.create_dataset(key, data=values)
+            with h5py.File(
+                os.path.join(output_dir, f"{model_str}_history.h5"), "w"
+            ) as f:
+                for key, values in history.items():
+                    f.create_dataset(key, data=values)
 
-        # Get train ROC, threshold and training history
-        y_true_train, y_pred_train = get_predictions(model, train_loader)
-        roc_prefix_train = os.path.join(
-            output_dir, f"{model_str}_on_{args.train_campaign}_train"
-        )
-        plot_roc_curve(y_true_train, y_pred_train, prefix_path=roc_prefix_train)
-        plot_training_history(history)
+            # Get train ROC, threshold and training history
+            y_true_train, y_pred_train = get_predictions(model, train_loader)
+            roc_prefix_train = os.path.join(
+                output_dir, f"{model_str}_on_{args.train_campaign}_train"
+            )
+            plot_roc_curve(y_true_train, y_pred_train, prefix_path=roc_prefix_train)
+            plot_training_history(history)
+
+        elif model_str == "TunedDNN":
+            train_file = os.path.join(
+                data_save_path, f"{args.train_campaign}_norm_train.h5"
+            )
+            val_file = os.path.join(
+                data_save_path, f"{args.train_campaign}_norm_val.h5"
+            )
+
+            train_dataset = HDF5Dataset(train_file, feature_keys, "cluster_response")
+            val_dataset = HDF5Dataset(val_file, feature_keys, "cluster_response")
+            input_dim = train_dataset[0][0].shape[0]
+
+            train_loader = DataLoader(
+                train_dataset,
+                batch_size=BATCH_SIZE,
+                shuffle=True,
+                num_workers=4,
+                pin_memory=True,
+                persistent_workers=True,
+            )
+            val_loader = DataLoader(
+                val_dataset,
+                batch_size=BATCH_SIZE,
+                shuffle=False,
+                num_workers=4,
+                pin_memory=True,
+                persistent_workers=True,
+            )
+
+            model = TunedDNNModel(input_dim).to(DEVICE)
+            model = torch.compile(model)
+            criterion = LGKLoss()
+            optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
+
+            model, history = train_model(
+                model, train_loader, val_loader, criterion, optimizer
+            )
+
+            torch.save(model.state_dict(), os.path.join(output_dir, f"{model_str}.pt"))
+
+            with h5py.File(
+                os.path.join(output_dir, f"{model_str}_history.h5"), "w"
+            ) as f:
+                for key, values in history.items():
+                    f.create_dataset(key, data=values)
 
     if args.test_campaign:
         test_dataset_str = campaign_to_dataset(args.test_campaign)
@@ -460,7 +511,8 @@ def main():
             args.test_campaign,
         )
 
-        model = DNNModel(len(feature_keys)).to(DEVICE)
+        model_cls = DNNModel if args.DNN else TunedDNNModel
+        model = model_cls(len(feature_keys)).to(DEVICE)
         model.load_state_dict(torch.load(os.path.join(output_dir, f"{model_str}.pt")))
 
         test_file = os.path.join(data_save_path, f"{args.test_campaign}_norm_test.h5")
