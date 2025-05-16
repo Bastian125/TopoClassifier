@@ -29,7 +29,6 @@ mode_group = parser.add_mutually_exclusive_group(required=True)
 mode_group.add_argument(
     "--campaign",
     type=str,
-    required=True,
     choices=["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"],
     help="Specify the campaign used for preprocessing.",
 )
