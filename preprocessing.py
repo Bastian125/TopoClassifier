@@ -87,12 +87,13 @@ def load_and_process(file_path, label, apply_norm):
     root_file = uproot.open(file_path)
     tree = root_file["ClusterTree;1"]
     df = tree.arrays(columns, library="pd")
+    length_before_cuts = len(df)
     df = apply_cuts(df)
     if label == 0 and apply_norm:
         df = apply_high_pile_up_cut(df)
     df["label"] = label
     df = compute_response(df)
-    print(f"  -> {len(df)} entries retained after all cuts\n")
+    print(f"  -> {len(df)}/{length_before_cuts} entries retained after all cuts\n")
     return df
 
 
