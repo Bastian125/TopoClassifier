@@ -153,7 +153,9 @@ class LGKLoss(nn.Module):
         Returns:
             loss (Tensor): Scalar loss value
         """
-        const = 1.0 / torch.sqrt(torch.tensor(2 * torch.pi * self.h, device=response_pred.device))
+        const = 1.0 / torch.sqrt(
+            torch.tensor(2 * torch.pi * self.h, device=response_pred.device)
+        )
         ratio = response_pred / response_true
         delta = ratio - 1.0
 
@@ -276,40 +278,54 @@ def plot_roc_curve(y_true, y_pred, prefix_path):
     fpr, tpr, thresholds = roc_curve(y_true, y_pred)
     roc_auc = auc(fpr, tpr)
 
-    # Best threshold by maximizing TPR - FPR
+    # Best threshold by maximizing TPR - FPR (Youden's J statistic)
     j_scores = tpr - fpr
     j_best_idx = np.argmax(j_scores)
     best_threshold = thresholds[j_best_idx]
     best_fpr = fpr[j_best_idx]
     best_tpr = tpr[j_best_idx]
 
-    # Plot
+    # Plot ROC curve
     plt.figure(figsize=(8, 6))
-    plt.plot(fpr, tpr, label=f"ROC curve (AUC = {roc_auc:.4f})")
-    plt.plot([0, 1], [0, 1], "k--")
+    plt.plot(fpr, tpr, label=f"ROC curve (AUC = {roc_auc:.4f})", linewidth=2)
+    plt.plot([0, 1], [0, 1], "k--", label="Random Classifier")
     plt.scatter(
-        best_fpr, best_tpr, color="red", label=f"Best threshold = {best_threshold:.4f}"
+        best_fpr,
+        best_tpr,
+        color="red",
+        zorder=5,
+        label=f"Best threshold = {best_threshold:.4f}",
     )
-    plt.xlabel("False Positive Rate")
-    plt.ylabel("True Positive Rate")
-    plt.title("Receiver Operating Characteristic")
+    plt.text(
+        best_fpr + 0.02,
+        best_tpr - 0.05,
+        f"Thresh = {best_threshold:.4f}\nTPR = {best_tpr:.3f}\nFPR = {best_fpr:.3f}",
+        fontsize=10,
+        bbox=dict(
+            boxstyle="round,pad=0.3", edgecolor="gray", facecolor="white", alpha=0.8
+        ),
+    )
+    plt.xlabel("False Positive Rate", fontsize=12)
+    plt.ylabel("True Positive Rate", fontsize=12)
+    plt.title("Receiver Operating Characteristic (ROC)", fontsize=14)
     plt.legend(loc="lower right")
     plt.grid(True)
 
+    # Save
     pdf_path = prefix_path + "_roc_curve.pdf"
     txt_path = prefix_path + "_threshold.txt"
-
+    plt.tight_layout()
     plt.savefig(pdf_path)
     plt.close()
 
     with open(txt_path, "w") as f:
         f.write(f"Best threshold: {best_threshold:.6f}\n")
-        f.write(f"True Positive Rate: {best_tpr:.6f}\n")
-        f.write(f"False Positive Rate: {best_fpr:.6f}\n")
+        f.write(f"True Positive Rate (TPR): {best_tpr:.6f}\n")
+        f.write(f"False Positive Rate (FPR): {best_fpr:.6f}\n")
         f.write(f"AUC: {roc_auc:.6f}\n")
 
     print(f"ROC curve saved to {pdf_path}")
-    print(f"Best threshold saved to {txt_path}")
+    print(f"Threshold info saved to {txt_path}")
 
 
 def train_model(model, train_loader, val_loader, criterion, optimizer):
