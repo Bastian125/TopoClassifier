@@ -529,7 +529,9 @@ def main():
 
         model_cls = DNNModel if args.DNN else TunedDNNModel
         model = model_cls(len(feature_keys)).to(DEVICE)
-        model.load_state_dict(torch.load(os.path.join(output_dir, f"{model_str}.pt")))
+        model.load_state_dict(
+            torch.load(os.path.join(output_dir, f"{model_str}_best.pt"))
+        )
 
         test_file = os.path.join(data_save_path, f"{args.test_campaign}_norm_test.h5")
         test_dataset = HDF5Dataset(test_file, feature_keys)
