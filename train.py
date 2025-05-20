@@ -16,7 +16,12 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.amp import GradScaler, autocast
-from sklearn.metrics import roc_curve, auc
+from sklearn.metrics import (
+    roc_curve,
+    auc,
+    precision_recall_curve,
+    average_precision_score,
+)
 from sklearn.utils.class_weight import compute_class_weight
 from tqdm import tqdm
 
@@ -307,7 +312,8 @@ def plot_roc_curve(y_true, y_pred, prefix_path):
     )
     plt.xlabel("False Positive Rate", fontsize=12)
     plt.ylabel("True Positive Rate", fontsize=12)
-    plt.title("Receiver Operating Characteristic (ROC)", fontsize=14)
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
     plt.legend(loc="lower right")
     plt.grid(True)
 
@@ -326,6 +332,76 @@ def plot_roc_curve(y_true, y_pred, prefix_path):
 
     print(f"ROC curve saved to {pdf_path}")
     print(f"Threshold info saved to {txt_path}")
+
+
+def plot_precision_recall(y_true, y_pred, prefix_path):
+    """
+    Plot and save Precision-Recall (PR) curve with average precision.
+    Saves both PDF and TXT file with summary.
+    """
+    precision, recall, _ = precision_recall_curve(y_true, y_pred)
+    avg_precision = average_precision_score(y_true, y_pred)
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(
+        recall, precision, label=f"Avg Precision = {avg_precision:.4f}", linewidth=2
+    )
+    plt.xlabel("Recall")
+    plt.ylabel("Precision")
+    plt.xlim(0, 1)
+    plt.ylim(0, 1)
+    plt.legend(loc="upper right")
+    plt.grid(True)
+
+    pr_pdf_path = prefix_path + "_pr_curve.pdf"
+    pr_txt_path = prefix_path + "_pr_metrics.txt"
+
+    plt.tight_layout()
+    plt.savefig(pr_pdf_path)
+    plt.close()
+
+    with open(pr_txt_path, "w") as f:
+        f.write(f"Average Precision: {avg_precision:.6f}\n")
+
+    print(f"Precision-Recall curve saved to {pr_pdf_path}")
+    print(f"PR metrics saved to {pr_txt_path}")
+
+
+def plot_prediction_histogram(y_true, y_pred, prefix_path):
+    """
+    Plot a histogram of predicted probabilities for each class (label 0 and 1).
+    Saves as a PDF file.
+    """
+    y_true = np.array(y_true)
+    y_pred = np.array(y_pred)
+
+    plt.figure(figsize=(8, 6))
+    plt.hist(
+        y_pred[y_true == 1],
+        bins=50,
+        alpha=0.6,
+        label="Hard-scatter",
+        density=True,
+        histtype="stepfilled",
+    )
+    plt.hist(
+        y_pred[y_true == 0],
+        bins=50,
+        alpha=0.6,
+        label="Mixed/Pile-up",
+        density=True,
+        histtype="stepfilled",
+    )
+    plt.xlabel("Predicted Probability")
+    plt.ylabel("Density")
+    plt.legend()
+    plt.grid(True)
+
+    hist_path = prefix_path + "_prob_hist.pdf"
+    plt.tight_layout()
+    plt.savefig(hist_path)
+    plt.close()
+    print(f"Probability histogram saved to {hist_path}")
 
 
 def train_model(model, train_loader, val_loader, criterion, optimizer):
@@ -534,7 +610,7 @@ def main():
         )
 
         test_file = os.path.join(data_save_path, f"{args.test_campaign}_norm_test.h5")
-        test_dataset = HDF5Dataset(test_file, feature_keys)
+        test_dataset = HDF5Dataset(test_file, feature_keys, "label")
         test_loader = DataLoader(
             test_dataset,
             batch_size=BATCH_SIZE,
@@ -558,6 +634,8 @@ def main():
             test_out_dir, f"{model_str}_on_{args.test_campaign}"
         )
         plot_roc_curve(y_true, y_pred, prefix_path=roc_prefix_test)
+        plot_precision_recall(y_true, y_pred, prefix_path=roc_prefix_test)
+        plot_prediction_histogram(y_true, y_pred, prefix_path=roc_prefix_test)
 
     if args.plot:
         history_path = os.path.join(output_dir, f"{model_str}_history.h5")
