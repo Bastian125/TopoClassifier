@@ -29,3 +29,10 @@ class HDF5Dataset(Dataset):
 
     def __getitem__(self, idx):
         return self.data[idx], self.labels[idx]
+
+    def get_target_array(self, target_key="cluster_response"):
+        """
+        Utility to extract full array of a given target from the HDF5 file.
+        """
+        with h5py.File(self.file_path, "r") as f:
+            return np.array(f[target_key])

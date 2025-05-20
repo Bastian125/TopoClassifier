@@ -404,6 +404,41 @@ def plot_prediction_histogram(y_true, y_pred, prefix_path):
     print(f"Probability histogram saved to {hist_path}")
 
 
+def plot_cluster_response_histogram(
+    true_response, y_pred_probs, prefix_path, threshold=0.5
+):
+    """
+    Plot a histogram of true cluster_response values for clusters where the model predicted hard-scatter.
+
+    Args:
+        true_response (np.ndarray): The true cluster_response values.
+        y_pred_probs (np.ndarray): The predicted probabilities (after sigmoid).
+        prefix_path (str): Path prefix for saving the PDF.
+        threshold (float): Decision threshold for hard-scatter classification.
+    """
+    true_response = np.array(true_response)
+    y_pred_probs = np.array(y_pred_probs)
+
+    # Filter: keep only clusters predicted as hard-scatter
+    mask = y_pred_probs >= threshold
+    selected_response = true_response[mask]
+
+    plt.figure(figsize=(8, 6))
+    plt.hist(selected_response, bins=50, alpha=0.75, color="C0")
+    plt.xlabel("cluster_response")
+    plt.ylabel("Count")
+    plt.title(
+        f"cluster_response distribution (predicted hard-scatter, threshold ≥ {threshold:.2f})"
+    )
+    plt.grid(True)
+
+    out_path = prefix_path + "_cluster_response_hist.pdf"
+    plt.tight_layout()
+    plt.savefig(out_path)
+    plt.close()
+    print(f"cluster_response histogram saved to {out_path}")
+
+
 def train_model(model, train_loader, val_loader, criterion, optimizer):
     """Train model with early stopping and mixed precision."""
     history = {"train_loss": [], "val_loss": []}
@@ -636,6 +671,19 @@ def main():
         plot_roc_curve(y_true, y_pred, prefix_path=roc_prefix_test)
         plot_precision_recall(y_true, y_pred, prefix_path=roc_prefix_test)
         plot_prediction_histogram(y_true, y_pred, prefix_path=roc_prefix_test)
+
+        # Load from threshold TXT
+        with open(roc_prefix_test + "_threshold.txt") as f:
+            for line in f:
+                if line.startswith("Best threshold:"):
+                    best_threshold = float(line.split(":")[1].strip())
+
+        plot_cluster_response_histogram(
+            true_response=test_dataset.get_target_array("cluster_response"),
+            y_pred_probs=y_pred,
+            prefix_path=roc_prefix_test,
+            threshold=best_threshold,
+        )
 
     if args.plot:
         history_path = os.path.join(output_dir, f"{model_str}_history.h5")
