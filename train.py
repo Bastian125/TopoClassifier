@@ -63,7 +63,7 @@ parser.add_argument(
     "--train_campaign",
     type=str,
     required=True,
-    choices=["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"],
+    choices=["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e", "mc20", "mc23"],
     help="Specify the campaign used for training.",
 )
 
@@ -105,6 +105,8 @@ def campaign_to_dataset(campaign):
         "mc23a": "Run3a",
         "mc23d": "Run3d",
         "mc23e": "Run3e",
+        "mc20": "Run2",
+        "mc23": "Run3",
     }
     if campaign not in mapping:
         raise ValueError("Unknown campaign: " + campaign)
@@ -553,8 +555,8 @@ def main():
             class_weights = torch.tensor(weights, dtype=torch.float32).to(DEVICE)
             pos_weight = class_weights[1] / class_weights[0]
 
-            model = DNNModel(input_dim).to(DEVICE)
-            model = torch.compile(model)
+            uncompiled_model = DNNModel(input_dim).to(DEVICE)
+            model = torch.compile(uncompiled_model)
             criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
             optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 
@@ -562,7 +564,10 @@ def main():
                 model, train_loader, val_loader, criterion, optimizer
             )
 
-            torch.save(model.state_dict(), os.path.join(output_dir, f"{model_str}.pt"))
+            torch.save(
+                uncompiled_model.state_dict(),
+                os.path.join(output_dir, f"{model_str}.pt"),
+            )
 
             with h5py.File(
                 os.path.join(output_dir, f"{model_str}_history.h5"), "w"
@@ -607,8 +612,8 @@ def main():
                 persistent_workers=True,
             )
 
-            model = TunedDNNModel(input_dim).to(DEVICE)
-            model = torch.compile(model)
+            uncompiled_model = TunedDNNModel(input_dim).to(DEVICE)
+            model = torch.compile(uncompiled_model)
             criterion = LGKLoss()
             optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
 
@@ -616,7 +621,10 @@ def main():
                 model, train_loader, val_loader, criterion, optimizer
             )
 
-            torch.save(model.state_dict(), os.path.join(output_dir, f"{model_str}.pt"))
+            torch.save(
+                uncompiled_model.state_dict(),
+                os.path.join(output_dir, f"{model_str}.pt"),
+            )
 
             with h5py.File(
                 os.path.join(output_dir, f"{model_str}_history.h5"), "w"
