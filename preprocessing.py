@@ -29,7 +29,7 @@ mode_group = parser.add_mutually_exclusive_group(required=True)
 mode_group.add_argument(
     "--campaign",
     type=str,
-    choices=["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"],
+    choices=["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e", "mc20", "mc23"],
     help="Specify the campaign used for preprocessing.",
 )
 mode_group.add_argument(
@@ -175,21 +175,40 @@ def main():
     if args.campaign:
         print("Test mode activated...")
         tag = args.campaign
-        df_withpu = load_and_process(
-            os.path.join(root_path, f"{tag}_withPU.root"),
-            label=0,
-            apply_norm=apply_norm,
-        )
-        df_nopu = load_and_process(
-            os.path.join(root_path, f"{tag}_noPU.root"), label=1, apply_norm=apply_norm
-        )
-        df_combined = pd.concat([df_withpu, df_nopu], ignore_index=True)
+
+        if tag == "mc20":
+            sub_tags = ["mc20a", "mc20d", "mc20e"]
+        elif tag == "mc23":
+            sub_tags = ["mc23a", "mc23d", "mc23e"]
+        else:
+            sub_tags = [tag]
+
+        dfs_withpu = []
+        dfs_nopu = []
+
+        for sub_tag in sub_tags:
+            df_withpu = load_and_process(
+                os.path.join(root_path, f"{sub_tag}_withPU.root"),
+                label=0,
+                apply_norm=apply_norm,
+            )
+            df_nopu = load_and_process(
+                os.path.join(root_path, f"{sub_tag}_noPU.root"),
+                label=1,
+                apply_norm=apply_norm,
+            )
+            dfs_withpu.append(df_withpu)
+            dfs_nopu.append(df_nopu)
+
+        df_combined = pd.concat(dfs_withpu + dfs_nopu, ignore_index=True)
         train_df, val_df, test_df = split_data_full(df_combined)
+
         if apply_norm:
             normalize_data(train_df, val_df, test_df, tag)
             tag_suffix = "norm"
         else:
             tag_suffix = "raw"
+
         save_split(train_df, tag, f"{tag_suffix}_train")
         save_split(val_df, tag, f"{tag_suffix}_val")
         save_split(test_df, tag, f"{tag_suffix}_test")
