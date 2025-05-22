@@ -125,54 +125,6 @@ else:
     BATCH_SIZE = BATCH_SIZE_RUN3
 
 
-# ---------- Custom Activation Functions ---------- #
-class OffsetTanh(nn.Module):
-    """
-    Custom activation: f(x) = 2 * (tanh(x) + 1)
-    Maps input to the range (0, 4), smooth and monotonic.
-    """
-
-    def forward(self, x):
-        return 2 * (torch.tanh(x) + 1)
-
-
-# ---------- Custom Loss Functions ---------- #
-class LGKLoss(nn.Module):
-    """
-    LGK Loss as defined:
-    L = -1/(sqrt(2πh)) * exp[-(1/(2h)) * ((R_pred / R_true - 1)^2)] + α * |(R_pred / R_true - 1)|
-
-    Parameters:
-        h (float): Bandwidth-like parameter (controls Gaussian decay)
-        alpha (float): Weight of the L1 penalty term
-    """
-
-    def __init__(self, h=0.1, alpha=1.0):
-        super(LGKLoss, self).__init__()
-        self.h = h
-        self.alpha = alpha
-
-    def forward(self, response_pred, response_true):
-        """
-        Args:
-            response_pred (Tensor): Predicted response (R_clus^ML), shape (N,)
-            response_true (Tensor): Target response (R_clus^EM), shape (N,)
-        Returns:
-            loss (Tensor): Scalar loss value
-        """
-        const = 1.0 / torch.sqrt(
-            torch.tensor(2 * torch.pi * self.h, device=response_pred.device)
-        )
-        ratio = response_pred / response_true
-        delta = ratio - 1.0
-
-        gauss_term = -const * torch.exp(-0.5 * delta**2 / self.h)
-        l1_term = self.alpha * torch.abs(delta)
-
-        loss = gauss_term + l1_term
-        return loss.mean()
-
-
 # ---------- Model Definition ---------- #
 class DNNModel(nn.Module):
     """
@@ -204,44 +156,6 @@ class DNNModel(nn.Module):
             nn.ReLU(),
             nn.BatchNorm1d(8),
             nn.Linear(8, 1),
-        )
-
-    def forward(self, x):
-        return self.model(x)
-
-
-class TunedDNNModel(nn.Module):
-    """
-    Tuned Deep Neural Network model for binary classification.
-    Uses swish activation function after each hidden layer and a 2*(tanh(x)+1) different output layer.
-    Final layer does NOT include sigmoid; use BCEWithLogitsLoss instead.
-    """
-
-    def __init__(self, input_dim):
-        super(TunedDNNModel, self).__init__()
-        self.model = nn.Sequential(
-            nn.Linear(input_dim, 512),
-            nn.SiLU(),
-            nn.BatchNorm1d(512),
-            nn.Linear(512, 256),
-            nn.SiLU(),
-            nn.BatchNorm1d(256),
-            nn.Linear(256, 128),
-            nn.SiLU(),
-            nn.BatchNorm1d(128),
-            nn.Linear(128, 64),
-            nn.SiLU(),
-            nn.BatchNorm1d(64),
-            nn.Dropout(0.3),
-            nn.Linear(64, 32),
-            nn.SiLU(),
-            nn.BatchNorm1d(32),
-            nn.Dropout(0.3),
-            nn.Linear(32, 8),
-            nn.SiLU(),
-            nn.BatchNorm1d(8),
-            nn.Linear(8, 1),
-            OffsetTanh(),
         )
 
     def forward(self, x):
