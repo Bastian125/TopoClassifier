@@ -114,7 +114,7 @@ def campaign_to_dataset(campaign):
 
 
 train_dataset_str = campaign_to_dataset(args.train_campaign)
-model_str = "DNN" if args.DNN else "TunedDNN"
+model_str = "DNN"
 
 # Set learning rate and batch size depending on Run2 or Run3
 if "Run2" in train_dataset_str:
@@ -163,6 +163,15 @@ class DNNModel(nn.Module):
 
 
 # ---------- Helper Functions ---------- #
+def remove_prefix_from_state_dict(state_dict, prefix="_orig_mod."):
+    """Remove prefix from state_dict keys. Storing the compiled model in PyTorch
+    adds _orig_mod which must be removed for proper testing."""
+    return {
+        k.replace(prefix, "") if k.startswith(prefix) else k: v
+        for k, v in state_dict.items()
+    }
+
+
 def plot_training_history(history):
     """Plot and save training vs validation loss curves."""
     print("Plotting training history...")
@@ -494,57 +503,7 @@ def main():
             roc_prefix_train = os.path.join(
                 output_dir, f"{model_str}_on_{args.train_campaign}_train"
             )
-            plot_roc_curve(y_true_train, y_pred_train, prefix_path=roc_prefix_train)
             plot_training_history(history)
-
-        elif model_str == "TunedDNN":
-            train_file = os.path.join(
-                data_save_path, f"{args.train_campaign}_norm_train.h5"
-            )
-            val_file = os.path.join(
-                data_save_path, f"{args.train_campaign}_norm_val.h5"
-            )
-
-            train_dataset = HDF5Dataset(train_file, feature_keys, "cluster_response")
-            val_dataset = HDF5Dataset(val_file, feature_keys, "cluster_response")
-            input_dim = train_dataset[0][0].shape[0]
-
-            train_loader = DataLoader(
-                train_dataset,
-                batch_size=BATCH_SIZE,
-                shuffle=True,
-                num_workers=4,
-                pin_memory=True,
-                persistent_workers=True,
-            )
-            val_loader = DataLoader(
-                val_dataset,
-                batch_size=BATCH_SIZE,
-                shuffle=False,
-                num_workers=4,
-                pin_memory=True,
-                persistent_workers=True,
-            )
-
-            uncompiled_model = TunedDNNModel(input_dim).to(DEVICE)
-            model = torch.compile(uncompiled_model)
-            criterion = LGKLoss()
-            optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
-
-            model, history = train_model(
-                model, train_loader, val_loader, criterion, optimizer
-            )
-
-            torch.save(
-                uncompiled_model.state_dict(),
-                os.path.join(output_dir, f"{model_str}.pt"),
-            )
-
-            with h5py.File(
-                os.path.join(output_dir, f"{model_str}_history.h5"), "w"
-            ) as f:
-                for key, values in history.items():
-                    f.create_dataset(key, data=values)
 
     if args.test_campaign:
         test_dataset_str = campaign_to_dataset(args.test_campaign)
@@ -560,11 +519,11 @@ def main():
             args.test_campaign,
         )
 
-        model_cls = DNNModel if args.DNN else TunedDNNModel
+        model_cls = DNNModel
         model = model_cls(len(feature_keys)).to(DEVICE)
-        model.load_state_dict(
-            torch.load(os.path.join(output_dir, f"{model_str}_best.pt"))
-        )
+        state_dict = torch.load(os.path.join(output_dir, f"{model_str}_best.pt"))
+        state_dict = remove_prefix_from_state_dict(state_dict)
+        model.load_state_dict(state_dict)
 
         test_file = os.path.join(data_save_path, f"{args.test_campaign}_norm_test.h5")
         test_dataset = HDF5Dataset(test_file, feature_keys, "label")
