@@ -240,21 +240,22 @@ def main():
             del df_withpu, df_nopu
             gc.collect()
 
-            train_df, val_df, test_df = split_data_full(df_combined)
-            del df_combined
-            gc.collect()
+        train_df, val_df, test_df = split_data_full(df_combined)
+        del df_combined
+        gc.collect()
 
-            if apply_norm:
-                normalize_data(train_df, val_df, test_df, tag)
-                suffix = "norm"
-            else:
-                suffix = "raw"
+        if apply_norm:
+            stats = compute_streaming_stats([tag])
+            normalize_with_stats(train_df, val_df, test_df, stats, tag)
+            suffix = "norm"
+        else:
+            suffix = "raw"
 
-            save_split(train_df, tag, f"{suffix}_train")
-            save_split(val_df, tag, f"{suffix}_val")
-            save_split(test_df, tag, f"{suffix}_test")
-            del train_df, val_df, test_df
-            gc.collect()
+        save_split(train_df, tag, f"{suffix}_train")
+        save_split(val_df, tag, f"{suffix}_val")
+        save_split(test_df, tag, f"{suffix}_test")
+        del train_df, val_df, test_df
+        gc.collect()
 
 
 if __name__ == "__main__":
