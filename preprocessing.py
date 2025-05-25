@@ -48,6 +48,10 @@ args = parser.parse_args()
 
 # ---------- Helper Functions ---------- #
 def apply_cuts(df):
+    """
+    Apply physics cuts to filter topocluster data.
+    Removes clusters with low energy or invalid feature values.
+    """
     df = df[
         (df["cluster_ENG_CALIB_TOT"] > 0.3)
         & (df["clusterE"] > 0)
@@ -60,15 +64,24 @@ def apply_cuts(df):
 
 
 def apply_high_pile_up_cut(df):
+    """
+    Apply high pile-up cut for pile-up clusters (label 0).
+    """
     return df[(df["avgMu"] > 20)]
 
 
 def compute_response(df):
+    """
+    Compute cluster response: ratio of clusterE to cluster_ENG_CALIB_TOT.
+    """
     df["cluster_response"] = df["clusterE"] / df["cluster_ENG_CALIB_TOT"]
     return df[df["cluster_response"] > 0.1]
 
 
 def load_and_process(file_path, label, apply_norm):
+    """
+    Load ROOT file, apply cuts, compute response, and assign label.
+    """
     print(f"Loading {file_path}...")
     root_file = uproot.open(file_path)
     tree = root_file["ClusterTree;1"]
@@ -84,6 +97,9 @@ def load_and_process(file_path, label, apply_norm):
 
 
 def split_data_full(df):
+    """
+    Stratified split into train, val, and test.
+    """
     trainval_df, test_df = train_test_split(
         df, test_size=0.2, stratify=df["label"], random_state=42
     )
@@ -94,6 +110,9 @@ def split_data_full(df):
 
 
 def compute_streaming_stats(sub_tags):
+    """
+    Compute streaming mean, std, and log-shifts for all features across multiple campaigns.
+    """
     print("Pass 1: Streaming training stats...")
     sums = {}
     sqsums = {}
@@ -135,6 +154,9 @@ def compute_streaming_stats(sub_tags):
 
 
 def normalize_with_stats(train_df, val_df, test_df, stats, tag):
+    """
+    Apply log and standard scaling normalization to datasets using precomputed stats.
+    """
     stats_lines = [f"Normalization statistics for {tag}\n"]
     for feature in log_features:
         _, _, shift = stats[feature]
@@ -161,6 +183,9 @@ def normalize_with_stats(train_df, val_df, test_df, stats, tag):
 
 
 def save_split(df, tag, split_name):
+    """
+    Save DataFrame to HDF5 file with compression and chunking.
+    """
     output_path = os.path.join(save_path, f"{tag}_{split_name}.h5")
     with h5py.File(output_path, "w") as f:
         for col in df.columns:
@@ -169,6 +194,9 @@ def save_split(df, tag, split_name):
 
 
 def merge_h5_files(file_list, output_path):
+    """
+    Merge multiple HDF5 files into a single HDF5 file.
+    """
     with h5py.File(output_path, "w") as fout:
         dsets = {}
         for path in file_list:
