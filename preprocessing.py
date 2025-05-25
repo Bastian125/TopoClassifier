@@ -255,14 +255,13 @@ def main():
     elif args.full:
         print("Full mode activated...")
         all_tags = ["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"]
-
-        # Step 1: Compute streaming stats across all campaigns
-        stats = compute_streaming_stats(all_tags) if apply_norm else None
         suffix = "norm" if apply_norm else "raw"
 
-        # Step 2: Process and save each campaign individually
         for tag in all_tags:
             print(f"Processing {tag}...")
+
+            # Compute stats per sub-campaign
+            stats = compute_streaming_stats([tag]) if apply_norm else None
 
             df_withpu = load_and_process(
                 os.path.join(root_path, f"{tag}_withPU.root"), 0, apply_norm=False
