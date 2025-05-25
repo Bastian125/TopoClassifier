@@ -128,11 +128,7 @@ def compute_streaming_stats(sub_tags):
     for feature in sums:
         mean = sums[feature] / count
         std = np.sqrt(sqsums[feature] / count - mean**2)
-        shift = (
-            abs(mins[feature]) + 1e-12
-            if feature in log_features and mins[feature] <= 0
-            else 0
-        )
+        shift = abs(mins[feature]) + 1e-6 if feature in log_features else 0
         stats[feature] = (mean, std, shift)
 
     return stats
@@ -205,9 +201,11 @@ def main():
         else:
             sub_tags = [tag]
 
+        # Step 1: Compute streaming stats across all campaigns
         stats = compute_streaming_stats(sub_tags) if apply_norm else None
         suffix = "norm" if apply_norm else "raw"
 
+        # Step 2: Process and save each campaign individually
         print("Pass 2: Normalizing and saving splits...")
         for sub_tag in sub_tags:
             df_withpu = load_and_process(
@@ -229,36 +227,30 @@ def main():
     elif args.full:
         print("Full mode activated...")
         all_tags = ["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"]
-        df_list = []
+
+        # Step 1: Compute streaming stats across all campaigns
+        stats = compute_streaming_stats(all_tags) if apply_norm else None
+        suffix = "norm" if apply_norm else "raw"
+
+        # Step 2: Process and save each campaign individually
         for tag in all_tags:
             print(f"Processing {tag}...")
+
             df_withpu = load_and_process(
-                os.path.join(root_path, f"{tag}_withPU.root"), 0, apply_norm
+                os.path.join(root_path, f"{tag}_withPU.root"), 0, apply_norm=False
             )
             df_nopu = load_and_process(
-                os.path.join(root_path, f"{tag}_noPU.root"), 1, apply_norm
+                os.path.join(root_path, f"{tag}_noPU.root"), 1, apply_norm=False
             )
-            df_list.append(pd.concat([df_withpu, df_nopu], ignore_index=True))
-            del df_withpu, df_nopu
+            df_combined = pd.concat([df_withpu, df_nopu], ignore_index=True)
+            train_df, val_df, test_df = split_data_full(df_combined)
+            if apply_norm:
+                normalize_with_stats(train_df, val_df, test_df, stats, tag)
+            save_split(train_df, tag, f"{suffix}_train")
+            save_split(val_df, tag, f"{suffix}_val")
+            save_split(test_df, tag, f"{suffix}_test")
+            del df_withpu, df_nopu, df_combined, train_df, val_df, test_df
             gc.collect()
-
-        df_combined = pd.concat(df_list, ignore_index=True)
-        train_df, val_df, test_df = split_data_full(df_combined)
-        del df_combined
-        gc.collect()
-
-        if apply_norm:
-            stats = compute_streaming_stats(all_tags)
-            normalize_with_stats(train_df, val_df, test_df, stats, "full")
-            suffix = "norm"
-        else:
-            suffix = "raw"
-
-        save_split(train_df, "full", f"{suffix}_train")
-        save_split(val_df, "full", f"{suffix}_val")
-        save_split(test_df, "full", f"{suffix}_test")
-        del train_df, val_df, test_df
-        gc.collect()
 
 
 if __name__ == "__main__":
