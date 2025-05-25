@@ -195,7 +195,7 @@ def main():
     apply_norm = not args.no_normalisation
 
     if args.campaign:
-        print("Test mode activated...")
+        print("Single campaign mode activated...")
         tag = args.campaign
 
         if tag == "mc20":
@@ -219,16 +219,18 @@ def main():
             df_combined = pd.concat([df_withpu, df_nopu], ignore_index=True)
             train_df, val_df, test_df = split_data_full(df_combined)
             if apply_norm:
-                normalize_with_stats(train_df, val_df, test_df, stats, tag)
-            save_split(train_df, tag, f"{suffix}_train")
-            save_split(val_df, tag, f"{suffix}_val")
-            save_split(test_df, tag, f"{suffix}_test")
+                normalize_with_stats(train_df, val_df, test_df, stats, sub_tag)
+            save_split(train_df, sub_tag, f"{suffix}_train")
+            save_split(val_df, sub_tag, f"{suffix}_val")
+            save_split(test_df, sub_tag, f"{suffix}_test")
             del df_withpu, df_nopu, df_combined, train_df, val_df, test_df
             gc.collect()
 
     elif args.full:
         print("Full mode activated...")
-        for tag in ["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"]:
+        all_tags = ["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"]
+        df_list = []
+        for tag in all_tags:
             print(f"Processing {tag}...")
             df_withpu = load_and_process(
                 os.path.join(root_path, f"{tag}_withPU.root"), 0, apply_norm
@@ -236,24 +238,25 @@ def main():
             df_nopu = load_and_process(
                 os.path.join(root_path, f"{tag}_noPU.root"), 1, apply_norm
             )
-            df_combined = pd.concat([df_withpu, df_nopu], ignore_index=True)
+            df_list.append(pd.concat([df_withpu, df_nopu], ignore_index=True))
             del df_withpu, df_nopu
             gc.collect()
 
+        df_combined = pd.concat(df_list, ignore_index=True)
         train_df, val_df, test_df = split_data_full(df_combined)
         del df_combined
         gc.collect()
 
         if apply_norm:
-            stats = compute_streaming_stats([tag])
-            normalize_with_stats(train_df, val_df, test_df, stats, tag)
+            stats = compute_streaming_stats(all_tags)
+            normalize_with_stats(train_df, val_df, test_df, stats, "full")
             suffix = "norm"
         else:
             suffix = "raw"
 
-        save_split(train_df, tag, f"{suffix}_train")
-        save_split(val_df, tag, f"{suffix}_val")
-        save_split(test_df, tag, f"{suffix}_test")
+        save_split(train_df, "full", f"{suffix}_train")
+        save_split(val_df, "full", f"{suffix}_val")
+        save_split(test_df, "full", f"{suffix}_test")
         del train_df, val_df, test_df
         gc.collect()
 
