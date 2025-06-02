@@ -1,13 +1,10 @@
 """
 Preprocess root files for training or plotting and store them as hdf5-files.
-Optimized for memory efficiency with chunking and compression.
-Normalization is applied across full campaigns (e.g., mc20) using streaming statistics.
 """
 
 # ---------- Imports ---------- #
 import os
 import argparse
-import gc
 
 import uproot
 import h5py
@@ -49,8 +46,8 @@ args = parser.parse_args()
 # ---------- Helper Functions ---------- #
 def apply_cuts(df):
     """
-    Apply physics cuts to filter topocluster data.
-    Removes clusters with low energy or invalid feature values.
+    Apply consistent physics-motivated cuts on calorimeter cluster variables.
+    Removes entries with unphysical or undefined values.
     """
     df = df[
         (df["cluster_ENG_CALIB_TOT"] > 0.3)
@@ -65,14 +62,15 @@ def apply_cuts(df):
 
 def apply_high_pile_up_cut(df):
     """
-    Apply high pile-up cut for pile-up clusters (label 0).
+    Apply avgMu > 20 to select pile-up dominated events (used only for background).
     """
     return df[(df["avgMu"] > 20)]
 
 
 def compute_response(df):
     """
-    Compute cluster response: ratio of clusterE to cluster_ENG_CALIB_TOT.
+    Compute response as clusterE / cluster_ENG_CALIB_TOT.
+    Apply a cut to keep only entries with response > 0.1.
     """
     df["cluster_response"] = df["clusterE"] / df["cluster_ENG_CALIB_TOT"]
     return df[df["cluster_response"] > 0.1]
@@ -80,7 +78,10 @@ def compute_response(df):
 
 def load_and_process(file_path, label, apply_norm):
     """
-    Load ROOT file, apply cuts, compute response, and assign label.
+    Load ROOT file and return a preprocessed pandas DataFrame with:
+    - cuts applied
+    - label assigned (0 for PU, 1 for signal)
+    - response calculated and filtered
     """
     print(f"Loading {file_path}...")
     root_file = uproot.open(file_path)
@@ -98,7 +99,7 @@ def load_and_process(file_path, label, apply_norm):
 
 def split_data_full(df):
     """
-    Stratified split into train, val, and test.
+    Stratified split into 60% train, 20% val, 20% test.
     """
     trainval_df, test_df = train_test_split(
         df, test_size=0.2, stratify=df["label"], random_state=42
@@ -109,117 +110,70 @@ def split_data_full(df):
     return train_df, val_df, test_df
 
 
-def compute_streaming_stats(sub_tags):
+def normalize_data(train_df, val_df, test_df, tag):
     """
-    Compute streaming mean, std, and log-shifts for all features across multiple campaigns.
-    """
-    print("Pass 1: Streaming training stats...")
-    sums = {}
-    sqsums = {}
-    mins = {}
-    count = 0
-    for feature in log_features + normal_features + ["cluster_time"]:
-        sums[feature] = 0.0
-        sqsums[feature] = 0.0
-        mins[feature] = np.inf
-
-    for sub_tag in sub_tags:
-        df_withpu = load_and_process(
-            os.path.join(root_path, f"{sub_tag}_withPU.root"), 0, apply_norm=False
-        )
-        df_nopu = load_and_process(
-            os.path.join(root_path, f"{sub_tag}_noPU.root"), 1, apply_norm=False
-        )
-        df_combined = pd.concat([df_withpu, df_nopu], ignore_index=True)
-        train_df, _, _ = split_data_full(df_combined)
-        for feature in sums:
-            vals = train_df[feature].values
-            if feature == "cluster_time":
-                vals = np.cbrt(np.abs(vals)) * np.sign(vals)
-            sums[feature] += vals.sum()
-            sqsums[feature] += (vals**2).sum()
-            mins[feature] = min(mins[feature], vals.min())
-        count += len(train_df)
-        del df_withpu, df_nopu, df_combined, train_df
-        gc.collect()
-
-    stats = {}
-    for feature in sums:
-        mean = sums[feature] / count
-        std = np.sqrt(sqsums[feature] / count - mean**2)
-        shift = abs(mins[feature]) + 1e-6 if feature in log_features else 0
-        stats[feature] = (mean, std, shift)
-
-    return stats
-
-
-def normalize_with_stats(train_df, val_df, test_df, stats, tag):
-    """
-    Apply log and standard scaling normalization to datasets using precomputed stats.
+    Apply log and standard normalization using statistics from the training set.
+    Also applies cubic root transformation to cluster_time.
+    Saves normalization statistics to a .txt file.
     """
     stats_lines = [f"Normalization statistics for {tag}\n"]
+
     for feature in log_features:
-        _, _, shift = stats[feature]
-        for df in [train_df, val_df, test_df]:
-            df[feature] = np.log10(df[feature] + shift)
+        x_train = train_df[feature]
+        min_val = x_train.min()
+        epsilon = 1e-12
+        shift = abs(min_val) + epsilon if min_val <= 0 else 0
+        train_df[feature] = np.log10(x_train + shift)
+        val_df[feature] = np.log10(val_df[feature] + shift)
+        test_df[feature] = np.log10(test_df[feature] + shift)
         stats_lines.append(f"{feature} (log): shift = {shift:.6e}\n")
 
     for feature in normal_features:
-        mean, std, _ = stats[feature]
-        for df in [train_df, val_df, test_df]:
-            df[feature] = (df[feature] - mean) / std
+        mean = train_df[feature].mean()
+        std = train_df[feature].std()
+        train_df[feature] = (train_df[feature] - mean) / std
+        val_df[feature] = (val_df[feature] - mean) / std
+        test_df[feature] = (test_df[feature] - mean) / std
         stats_lines.append(f"{feature}: mean = {mean:.6f}, std = {std:.6f}\n")
 
-    mean, std, _ = stats["cluster_time"]
+    x_train_time = np.abs(train_df["cluster_time"]) ** (1 / 3) * np.sign(
+        train_df["cluster_time"]
+    )
+    mean = x_train_time.mean()
+    std = x_train_time.std()
     for df in [train_df, val_df, test_df]:
-        x = np.cbrt(np.abs(df["cluster_time"])) * np.sign(df["cluster_time"])
+        x = np.abs(df["cluster_time"]) ** (1 / 3) * np.sign(df["cluster_time"])
         df["cluster_time"] = (x - mean) / std
     stats_lines.append(f"cluster_time (cbrt): mean = {mean:.6f}, std = {std:.6f}\n")
 
+    # Save stats to txt
     stats_path = os.path.join(save_path, f"{tag}_norm_stats.txt")
     with open(stats_path, "w") as f:
         f.writelines(stats_lines)
     print(f"Saved normalization stats to {stats_path}")
 
 
-def save_split(df, tag, split_name):
+def save_split(df, base_name, tag):
     """
-    Save DataFrame to HDF5 file with compression and chunking.
+    Save a single DataFrame to an HDF5 file under data_save_path.
     """
-    output_path = os.path.join(save_path, f"{tag}_{split_name}.h5")
+    output_path = os.path.join(save_path, f"{base_name}_{tag}.h5")
     with h5py.File(output_path, "w") as f:
         for col in df.columns:
-            f.create_dataset(col, data=df[col].values, chunks=True, compression="gzip")
-    print(f"Saved {split_name} split to {output_path}\n")
+            f.create_dataset(col, data=df[col].values)
+    print(f"Saved {tag} split to {output_path}\n")
 
 
-def merge_h5_files(file_list, output_path):
-    """
-    Merge multiple HDF5 files into a single HDF5 file.
-    """
-    with h5py.File(output_path, "w") as fout:
-        dsets = {}
-        for path in file_list:
-            with h5py.File(path, "r") as fin:
-                for key in fin:
-                    if key not in dsets:
-                        dsets[key] = fout.create_dataset(
-                            key,
-                            data=fin[key],
-                            maxshape=(None,),
-                            chunks=True,
-                            compression="gzip",
-                        )
-                    else:
-                        dsets[key].resize((dsets[key].shape[0] + fin[key].shape[0],))
-                        dsets[key][-fin[key].shape[0] :] = fin[key][...]
-
-
+# ---------- Main Function ---------- #
 def main():
+    """
+    Main entry point for preprocessing. Handles test or full mode.
+    Loads ROOT files, applies cuts and normalization, and saves HDF5 splits.
+    """
     apply_norm = not args.no_normalisation
 
     if args.campaign:
-        print("Single campaign mode activated...")
+        print("Test mode activated...")
         tag = args.campaign
 
         if tag == "mc20":
@@ -229,55 +183,61 @@ def main():
         else:
             sub_tags = [tag]
 
-        # Step 1: Compute streaming stats across all campaigns
-        stats = compute_streaming_stats(sub_tags) if apply_norm else None
-        suffix = "norm" if apply_norm else "raw"
+        dfs_withpu = []
+        dfs_nopu = []
 
-        # Step 2: Process and save each campaign individually
-        print("Pass 2: Normalizing and saving splits...")
         for sub_tag in sub_tags:
             df_withpu = load_and_process(
-                os.path.join(root_path, f"{sub_tag}_withPU.root"), 0, apply_norm=False
+                os.path.join(root_path, f"{sub_tag}_withPU.root"),
+                label=0,
+                apply_norm=apply_norm,
             )
             df_nopu = load_and_process(
-                os.path.join(root_path, f"{sub_tag}_noPU.root"), 1, apply_norm=False
+                os.path.join(root_path, f"{sub_tag}_noPU.root"),
+                label=1,
+                apply_norm=apply_norm,
             )
-            df_combined = pd.concat([df_withpu, df_nopu], ignore_index=True)
-            train_df, val_df, test_df = split_data_full(df_combined)
-            if apply_norm:
-                normalize_with_stats(train_df, val_df, test_df, stats, sub_tag)
-            save_split(train_df, sub_tag, f"{suffix}_train")
-            save_split(val_df, sub_tag, f"{suffix}_val")
-            save_split(test_df, sub_tag, f"{suffix}_test")
-            del df_withpu, df_nopu, df_combined, train_df, val_df, test_df
-            gc.collect()
+            dfs_withpu.append(df_withpu)
+            dfs_nopu.append(df_nopu)
+
+        df_combined = pd.concat(dfs_withpu + dfs_nopu, ignore_index=True)
+        train_df, val_df, test_df = split_data_full(df_combined)
+
+        if apply_norm:
+            normalize_data(train_df, val_df, test_df, tag)
+            tag_suffix = "norm"
+        else:
+            tag_suffix = "raw"
+
+        save_split(train_df, tag, f"{tag_suffix}_train")
+        save_split(val_df, tag, f"{tag_suffix}_val")
+        save_split(test_df, tag, f"{tag_suffix}_test")
 
     elif args.full:
         print("Full mode activated...")
-        all_tags = ["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"]
-        suffix = "norm" if apply_norm else "raw"
-
-        for tag in all_tags:
+        tags = ["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"]
+        for tag in tags:
             print(f"Processing {tag}...")
-
-            # Compute stats per sub-campaign
-            stats = compute_streaming_stats([tag]) if apply_norm else None
-
             df_withpu = load_and_process(
-                os.path.join(root_path, f"{tag}_withPU.root"), 0, apply_norm=False
+                os.path.join(root_path, f"{tag}_withPU.root"),
+                label=0,
+                apply_norm=apply_norm,
             )
             df_nopu = load_and_process(
-                os.path.join(root_path, f"{tag}_noPU.root"), 1, apply_norm=False
+                os.path.join(root_path, f"{tag}_noPU.root"),
+                label=1,
+                apply_norm=apply_norm,
             )
             df_combined = pd.concat([df_withpu, df_nopu], ignore_index=True)
             train_df, val_df, test_df = split_data_full(df_combined)
             if apply_norm:
-                normalize_with_stats(train_df, val_df, test_df, stats, tag)
-            save_split(train_df, tag, f"{suffix}_train")
-            save_split(val_df, tag, f"{suffix}_val")
-            save_split(test_df, tag, f"{suffix}_test")
-            del df_withpu, df_nopu, df_combined, train_df, val_df, test_df
-            gc.collect()
+                normalize_data(train_df, val_df, test_df, tag)
+                tag_suffix = "norm"
+            else:
+                tag_suffix = "raw"
+            save_split(train_df, tag, f"{tag_suffix}_train")
+            save_split(val_df, tag, f"{tag_suffix}_val")
+            save_split(test_df, tag, f"{tag_suffix}_test")
 
 
 if __name__ == "__main__":
