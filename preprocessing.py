@@ -146,8 +146,7 @@ def normalize_data(train_df, val_df, test_df, tag):
         df["cluster_time"] = (x - mean) / std
     stats_lines.append(f"cluster_time (cbrt): mean = {mean:.6f}, std = {std:.6f}\n")
 
-    # Save stats to txt
-    stats_path = os.path.join(save_path, f"{tag}_norm_stats.txt")
+    stats_path = os.path.join(save_path, f"{tag}_stats.txt")
     with open(stats_path, "w") as f:
         f.writelines(stats_lines)
     print(f"Saved normalization stats to {stats_path}")
@@ -164,16 +163,122 @@ def save_split(df, base_name, tag):
     print(f"Saved {tag} split to {output_path}\n")
 
 
+def save_concatenated(df, campaign, split):
+    """
+    Save the concatenated val/test DataFrame for the campaign.
+    """
+    output_path = os.path.join(save_path, f"{campaign}_{split}.h5")
+    with h5py.File(output_path, "w") as f:
+        for col in df.columns:
+            f.create_dataset(col, data=df[col].values)
+    print(f"Saved concatenated {split} split to {output_path}")
+
+
+def renormalise_campaign(campaign):
+    """
+    Recompute normalization statistics for the combined train datasets of the specified campaign.
+    Applies new normalization to train/val/test split files and saves updated versions.
+    Also concatenates and saves combined val/test splits.
+    """
+    print(f"Renormalising campaign: {campaign}")
+
+    if campaign == "mc20":
+        sub_campaigns = ["mc20a", "mc20d", "mc20e"]
+    elif campaign == "mc23":
+        sub_campaigns = ["mc23a", "mc23d", "mc23e"]
+    else:
+        print(f"Unknown campaign: {campaign}")
+        return
+
+    # Load and concatenate train datasets
+    train_dfs = []
+    for sub in sub_campaigns:
+        file_path = os.path.join(save_path, f"{sub}_norm_train.h5")
+        if not os.path.exists(file_path):
+            print(f"File not found: {file_path}")
+            return
+        with h5py.File(file_path, "r") as f:
+            df = {key: f[key][()] for key in f.keys()}
+        df = pd.DataFrame(df)
+        train_dfs.append(df)
+    combined_train_df = pd.concat(train_dfs, ignore_index=True)
+
+    # Compute global normalization statistics
+    stats_lines = [f"Recomputed normalization statistics for {campaign}\n"]
+    norm_stats = {}
+    for feature in normal_features:
+        mean = combined_train_df[feature].mean()
+        std = combined_train_df[feature].std()
+        norm_stats[feature] = (mean, std)
+        stats_lines.append(f"{feature}: mean = {mean:.6f}, std = {std:.6f}\n")
+
+    x_time = np.abs(combined_train_df["cluster_time"]) ** (1 / 3) * np.sign(
+        combined_train_df["cluster_time"]
+    )
+    mean_time = x_time.mean()
+    std_time = x_time.std()
+    stats_lines.append(
+        f"cluster_time (cbrt): mean = {mean_time:.6f}, std = {std_time:.6f}\n"
+    )
+
+    # Apply normalization to train/val/test and concatenate val/test
+    combined_val_dfs = []
+    combined_test_dfs = []
+
+    for split in ["train", "val", "test"]:
+        for sub in sub_campaigns:
+            file_path = os.path.join(save_path, f"{sub}_norm_{split}.h5")
+            if not os.path.exists(file_path):
+                print(f"File not found: {file_path}")
+                continue
+            with h5py.File(file_path, "r") as f:
+                df = {key: f[key][()] for key in f.keys()}
+            df = pd.DataFrame(df)
+
+            for feature in normal_features:
+                mean, std = norm_stats[feature]
+                df[feature] = (df[feature] - mean) / std
+
+            x = np.abs(df["cluster_time"]) ** (1 / 3) * np.sign(df["cluster_time"])
+            df["cluster_time"] = (x - mean_time) / std_time
+
+            output_path = os.path.join(save_path, f"{sub}_norm2_{split}.h5")
+            with h5py.File(output_path, "w") as f:
+                for col in df.columns:
+                    f.create_dataset(col, data=df[col].values)
+            print(f"Saved renormalised {split} split to {output_path}")
+
+            if split == "val":
+                combined_val_dfs.append(df)
+            elif split == "test":
+                combined_test_dfs.append(df)
+
+    # Save concatenated val/test splits
+    if combined_val_dfs:
+        save_concatenated(
+            pd.concat(combined_val_dfs, ignore_index=True), campaign, "val"
+        )
+    if combined_test_dfs:
+        save_concatenated(
+            pd.concat(combined_test_dfs, ignore_index=True), campaign, "test"
+        )
+
+    # Save global stats
+    stats_path = os.path.join(save_path, f"{campaign}_stats.txt")
+    with open(stats_path, "w") as f:
+        f.writelines(stats_lines)
+    print(f"Saved recomputed normalization stats to {stats_path}")
+
+
 # ---------- Main Function ---------- #
 def main():
     """
-    Main entry point for preprocessing. Handles test or full mode.
+    Main entry point for preprocessing. Handles test, full, and renormalisation modes.
     Loads ROOT files, applies cuts and normalization, and saves HDF5 splits.
     """
     apply_norm = not args.no_normalisation
 
     if args.campaign:
-        print("Test mode activated...")
         tag = args.campaign
 
         if tag == "mc20":
@@ -183,6 +288,19 @@ def main():
         else:
             sub_tags = [tag]
 
+        train_files_exist = all(
+            os.path.exists(os.path.join(save_path, f"{sub}_norm_train.h5"))
+            for sub in sub_tags
+        )
+
+        if train_files_exist and apply_norm:
+            print(
+                f"Detected existing train splits for {tag}. Proceeding with renormalisation..."
+            )
+            renormalise_campaign(tag)
+            return
+
+        print("Preprocessing from ROOT files...")
         dfs_withpu = []
         dfs_nopu = []
 
