@@ -1,22 +1,25 @@
 """
-Preprocess root files for training or plotting and store them as hdf5-files.
+Preprocess ROOT files for training or plotting and store them as HDF5 files.
+- Processes individual sub-campaigns (e.g., mc20a) from ROOT files.
+- Concatenates mc20a/d/e or mc23a/d/e train/val/test splits into combined files.
+- Recomputes mean/std for normalisation (including log features and cluster_time) after concatenation.
+- Applies new normalisation to concatenated splits and saves updated files.
+- Memory-efficient, using h5py for file I/O and numpy arrays.
 """
 
 # ---------- Imports ---------- #
 import os
 import argparse
-
-import uproot
-import h5py
 import numpy as np
-import pandas as pd
+import h5py
+import uproot
 
 from sklearn.model_selection import train_test_split
 
 from config import (
-    columns,
-    log_features,
-    normal_features,
+    columns,  # List of feature columns to load from ROOT
+    log_features,  # List of log-transformed features
+    normal_features,  # List of standard normalisation features
     data_root_path as root_path,
     data_save_path as save_path,
 )
@@ -24,126 +27,138 @@ from config import (
 from io_utils import ensure_dir_exists
 
 # ---------- Argument Parser ---------- #
-parser = argparse.ArgumentParser(description="Perform preprocessing of root files.")
+parser = argparse.ArgumentParser(description="Preprocess ROOT files and HDF5 splits.")
 mode_group = parser.add_mutually_exclusive_group(required=True)
 mode_group.add_argument(
     "--campaign",
     type=str,
     choices=["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e", "mc20", "mc23"],
-    help="Specify the campaign used for preprocessing.",
+    help="Specify the campaign for preprocessing or renormalisation.",
 )
 mode_group.add_argument(
-    "--full", action="store_true", help="Run full preprocessing on all datasets"
+    "--full", action="store_true", help="Run full preprocessing on all datasets."
 )
 parser.add_argument(
     "--no-normalisation",
     action="store_true",
-    help="Skip normalisation and time transformation",
+    help="Skip normalisation and time transformation.",
 )
 args = parser.parse_args()
 
 
 # ---------- Helper Functions ---------- #
-def apply_cuts(df):
+def apply_cuts_mask(df):
     """
-    Apply consistent physics-motivated cuts on calorimeter cluster variables.
-    Removes entries with unphysical or undefined values.
+    Returns a boolean mask for physics-motivated cuts on clusters.
     """
-    df = df[
+    return (
         (df["cluster_ENG_CALIB_TOT"] > 0.3)
         & (df["clusterE"] > 0)
         & (df["cluster_CENTER_LAMBDA"] > 0.0)
         & (df["cluster_FIRST_ENG_DENS"] > 0.0)
         & (df["cluster_SECOND_TIME"] > 0.0)
         & (df["cluster_SIGNIFICANCE"] > 0.0)
-    ].drop("cluster_SIGNIFICANCE", axis=1)
-    return df
+    )
 
 
-def apply_high_pile_up_cut(df):
+def apply_high_pile_up_cut_mask(df):
     """
-    Apply avgMu > 20 to select pile-up dominated events (used only for background).
+    Returns a boolean mask for avgMu > 20 to select pile-up dominated events (used only for background).
     """
-    return df[(df["avgMu"] > 20)]
+    return df["avgMu"] > 20
 
 
-def compute_response(df):
+def compute_response_and_mask(df):
     """
-    Compute response as clusterE / cluster_ENG_CALIB_TOT.
-    Apply a cut to keep only entries with response > 0.1.
+    Computes response as clusterE / cluster_ENG_CALIB_TOT.
+    Adds 'cluster_response' to df and returns a mask for response > 0.1.
     """
-    df["cluster_response"] = df["clusterE"] / df["cluster_ENG_CALIB_TOT"]
-    return df[df["cluster_response"] > 0.1]
+    response = df["clusterE"] / df["cluster_ENG_CALIB_TOT"]
+    df["cluster_response"] = response
+    return response > 0.1
 
 
 def load_and_process(file_path, label, apply_norm):
     """
-    Load ROOT file and return a preprocessed pandas DataFrame with:
-    - cuts applied
-    - label assigned (0 for PU, 1 for signal)
-    - response calculated and filtered
+    Loads a ROOT file, applies physics cuts, optional pile-up cut (avgMu > 20), computes response,
+    and returns a filtered dictionary of numpy arrays with a 'label' key.
     """
     print(f"Loading {file_path}...")
-    root_file = uproot.open(file_path)
-    tree = root_file["ClusterTree;1"]
-    df = tree.arrays(columns, library="pd")
-    length_before_cuts = len(df)
-    df = apply_cuts(df)
+    tree = uproot.open(file_path)["ClusterTree;1"]
+    df = tree.arrays(columns, library="np")
+    length_before_cuts = len(df["clusterE"])
+
+    mask = apply_cuts_mask(df)
     if label == 0 and apply_norm:
-        df = apply_high_pile_up_cut(df)
-    df["label"] = label
-    df = compute_response(df)
-    print(f"  -> {len(df)}/{length_before_cuts} entries retained after all cuts\n")
+        mask &= apply_high_pile_up_cut_mask(df)
+    mask &= compute_response_and_mask(df)
+
+    df = {key: val[mask] for key, val in df.items()}
+    df["label"] = np.full_like(df["clusterE"], label)
+
+    print(
+        f"  -> {len(df['clusterE'])}/{length_before_cuts} entries retained after all cuts\n"
+    )
     return df
 
 
 def split_data_full(df):
     """
     Stratified split into 60% train, 20% val, 20% test.
+    Returns dictionaries of numpy arrays for train/val/test.
     """
-    trainval_df, test_df = train_test_split(
-        df, test_size=0.2, stratify=df["label"], random_state=42
+    labels = df["label"]
+    indices = np.arange(len(labels))
+    trainval_idx, test_idx = train_test_split(
+        indices, test_size=0.2, stratify=labels, random_state=42
     )
-    train_df, val_df = train_test_split(
-        trainval_df, test_size=0.25, stratify=trainval_df["label"], random_state=42
+    train_idx, val_idx = train_test_split(
+        trainval_idx, test_size=0.25, stratify=labels[trainval_idx], random_state=42
     )
-    return train_df, val_df, test_df
+    return (
+        {key: val[train_idx] for key, val in df.items()},
+        {key: val[val_idx] for key, val in df.items()},
+        {key: val[test_idx] for key, val in df.items()},
+    )
 
 
-def normalize_data(train_df, val_df, test_df, tag):
+def normalize_data(train, val, test, tag):
     """
-    Apply log and standard normalization using statistics from the training set.
+    Applies log and standard normalisation using statistics from the training set.
     Also applies cubic root transformation to cluster_time.
-    Saves normalization statistics to a .txt file.
+    Saves normalisation statistics to a .txt file for reference.
     """
     stats_lines = [f"Normalization statistics for {tag}\n"]
+    log_shifts = {}
 
+    # Apply log10 transform
     for feature in log_features:
-        x_train = train_df[feature]
+        x_train = train[feature]
         min_val = x_train.min()
         epsilon = 1e-12
         shift = abs(min_val) + epsilon if min_val <= 0 else 0
-        train_df[feature] = np.log10(x_train + shift)
-        val_df[feature] = np.log10(val_df[feature] + shift)
-        test_df[feature] = np.log10(test_df[feature] + shift)
+        log_shifts[feature] = shift
+        for split in [train, val, test]:
+            split[feature] = np.log10(split[feature] + shift)
         stats_lines.append(f"{feature} (log): shift = {shift:.6e}\n")
 
+    # Standard normalisation
     for feature in normal_features:
-        mean = train_df[feature].mean()
-        std = train_df[feature].std()
-        train_df[feature] = (train_df[feature] - mean) / std
-        val_df[feature] = (val_df[feature] - mean) / std
-        test_df[feature] = (test_df[feature] - mean) / std
+        mean = train[feature].mean()
+        std = train[feature].std()
+        for split in [train, val, test]:
+            split[feature] = (split[feature] - mean) / std
         stats_lines.append(f"{feature}: mean = {mean:.6f}, std = {std:.6f}\n")
 
-    x_train_time = np.abs(train_df["cluster_time"]) ** (1 / 3) * np.sign(
-        train_df["cluster_time"]
+    # cluster_time cubic root normalisation
+    x_train_time = np.cbrt(np.abs(train["cluster_time"])) * np.sign(
+        train["cluster_time"]
     )
     mean = x_train_time.mean()
     std = x_train_time.std()
-    for df in [train_df, val_df, test_df]:
-        x = np.abs(df["cluster_time"]) ** (1 / 3) * np.sign(df["cluster_time"])
-        df["cluster_time"] = (x - mean) / std
+    for split in [train, val, test]:
+        x = np.cbrt(np.abs(split["cluster_time"])) * np.sign(split["cluster_time"])
+        split["cluster_time"] = (x - mean) / std
     stats_lines.append(f"cluster_time (cbrt): mean = {mean:.6f}, std = {std:.6f}\n")
 
     stats_path = os.path.join(save_path, f"{tag}_stats.txt")
@@ -154,182 +169,133 @@ def normalize_data(train_df, val_df, test_df, tag):
 
 def save_split(df, base_name, tag):
     """
-    Save a single DataFrame to an HDF5 file under data_save_path.
+    Saves a dictionary of numpy arrays as an HDF5 file under data_save_path.
     """
     output_path = os.path.join(save_path, f"{base_name}_{tag}.h5")
     with h5py.File(output_path, "w") as f:
-        for col in df.columns:
-            f.create_dataset(col, data=df[col].values)
-    print(f"Saved {tag} split to {output_path}\n")
+        for key, val in df.items():
+            f.create_dataset(key, data=val)
+    print(f"Saved {tag} split to {output_path}")
 
 
-def save_concatenated(df, campaign, split):
+def concatenate_and_renormalise(campaign, sub_campaigns):
     """
-    Save the concatenated val/test DataFrame for the campaign.
+    Concatenates sub-campaign train/val/test splits into combined files.
+    Recomputes global mean/std from concatenated train split.
+    Applies new normalisation (log features, standard, cluster_time) across all splits.
     """
-    output_path = os.path.join(save_path, f"{campaign}_{split}.h5")
-    with h5py.File(output_path, "w") as f:
-        for col in df.columns:
-            f.create_dataset(col, data=df[col].values)
-    print(f"Saved concatenated {split} split to {output_path}")
-
-
-def renormalise_campaign(campaign):
-    """
-    Recompute normalization statistics for the combined train datasets of the specified campaign.
-    Applies new normalization to train/val/test split files and saves updated versions.
-    Also concatenates and saves combined val/test splits.
-    """
-    print(f"Renormalising campaign: {campaign}")
-
-    if campaign == "mc20":
-        sub_campaigns = ["mc20a", "mc20d", "mc20e"]
-    elif campaign == "mc23":
-        sub_campaigns = ["mc23a", "mc23d", "mc23e"]
-    else:
-        print(f"Unknown campaign: {campaign}")
+    required_files = [
+        os.path.join(save_path, f"{sub}_norm_train.h5") for sub in sub_campaigns
+    ]
+    if not all(os.path.exists(f) for f in required_files):
+        print(f"Skipping renormalisation: missing required files for {campaign}.")
         return
 
-    # Load and concatenate train datasets
-    train_dfs = []
-    for sub in sub_campaigns:
-        file_path = os.path.join(save_path, f"{sub}_norm_train.h5")
-        if not os.path.exists(file_path):
-            print(f"File not found: {file_path}")
-            return
-        with h5py.File(file_path, "r") as f:
-            df = {key: f[key][()] for key in f.keys()}
-        df = pd.DataFrame(df)
-        train_dfs.append(df)
-    combined_train_df = pd.concat(train_dfs, ignore_index=True)
-
-    # Compute global normalization statistics
-    stats_lines = [f"Recomputed normalization statistics for {campaign}\n"]
-    norm_stats = {}
-    for feature in normal_features:
-        mean = combined_train_df[feature].mean()
-        std = combined_train_df[feature].std()
-        norm_stats[feature] = (mean, std)
-        stats_lines.append(f"{feature}: mean = {mean:.6f}, std = {std:.6f}\n")
-
-    x_time = np.abs(combined_train_df["cluster_time"]) ** (1 / 3) * np.sign(
-        combined_train_df["cluster_time"]
-    )
-    mean_time = x_time.mean()
-    std_time = x_time.std()
-    stats_lines.append(
-        f"cluster_time (cbrt): mean = {mean_time:.6f}, std = {std_time:.6f}\n"
-    )
-
-    # Apply normalization to train/val/test and concatenate val/test
-    combined_val_dfs = []
-    combined_test_dfs = []
-
+    print(f"\nRenormalising and concatenating {campaign}...")
+    combined_data = {split: {} for split in ["train", "val", "test"]}
     for split in ["train", "val", "test"]:
         for sub in sub_campaigns:
             file_path = os.path.join(save_path, f"{sub}_norm_{split}.h5")
             if not os.path.exists(file_path):
-                print(f"File not found: {file_path}")
-                continue
+                print(f"Missing {file_path}, skipping renormalisation.")
+                return
             with h5py.File(file_path, "r") as f:
-                df = {key: f[key][()] for key in f.keys()}
-            df = pd.DataFrame(df)
+                for key in f.keys():
+                    combined_data[split].setdefault(key, []).append(f[key][:])
+        combined_data[split] = {
+            key: np.concatenate(arrays) for key, arrays in combined_data[split].items()
+        }
 
-            for feature in normal_features:
-                mean, std = norm_stats[feature]
-                df[feature] = (df[feature] - mean) / std
+    # Compute new stats from concatenated train split
+    train = combined_data["train"]
+    stats_lines = [f"Recomputed normalization statistics for {campaign}\n"]
+    log_shifts = {}
 
-            x = np.abs(df["cluster_time"]) ** (1 / 3) * np.sign(df["cluster_time"])
-            df["cluster_time"] = (x - mean_time) / std_time
+    for feature in log_features:
+        min_val = train[feature].min()
+        shift = abs(min_val) + 1e-12 if min_val <= 0 else 0
+        log_shifts[feature] = shift
+        stats_lines.append(f"{feature} (log): shift = {shift:.6e}\n")
 
-            output_path = os.path.join(save_path, f"{sub}_norm2_{split}.h5")
-            with h5py.File(output_path, "w") as f:
-                for col in df.columns:
-                    f.create_dataset(col, data=df[col].values)
-            print(f"Saved renormalised {split} split to {output_path}")
+    norm_stats = {}
+    for feature in normal_features:
+        mean = train[feature].mean()
+        std = train[feature].std()
+        norm_stats[feature] = (mean, std)
+        stats_lines.append(f"{feature}: mean = {mean:.6f}, std = {std:.6f}\n")
 
-            if split == "val":
-                combined_val_dfs.append(df)
-            elif split == "test":
-                combined_test_dfs.append(df)
+    x = np.cbrt(np.abs(train["cluster_time"])) * np.sign(train["cluster_time"])
+    mean_time = x.mean()
+    std_time = x.std()
+    norm_stats["cluster_time"] = (mean_time, std_time)
+    stats_lines.append(
+        f"cluster_time (cbrt): mean = {mean_time:.6f}, std = {std_time:.6f}\n"
+    )
 
-    # Save concatenated val/test splits
-    if combined_val_dfs:
-        save_concatenated(
-            pd.concat(combined_val_dfs, ignore_index=True), campaign, "val"
-        )
-    if combined_test_dfs:
-        save_concatenated(
-            pd.concat(combined_test_dfs, ignore_index=True), campaign, "test"
-        )
-
-    # Save global stats
-    stats_path = os.path.join(save_path, f"{campaign}_stats.txt")
+    stats_path = os.path.join(save_path, f"{campaign}_norm_stats.txt")
     with open(stats_path, "w") as f:
         f.writelines(stats_lines)
-    print(f"Saved recomputed normalization stats to {stats_path}")
+    print(f"Saved new normalization stats to {stats_path}")
+
+    # Apply re-normalisation to all splits
+    for split, data in combined_data.items():
+        for feature in log_features:
+            shift = log_shifts[feature]
+            data[feature] = np.log10(data[feature] + shift)
+        for feature in normal_features:
+            mean, std = norm_stats[feature]
+            data[feature] = (data[feature] - mean) / std
+        x = np.cbrt(np.abs(data["cluster_time"])) * np.sign(data["cluster_time"])
+        data["cluster_time"] = (x - mean_time) / std_time
+
+        output_path = os.path.join(save_path, f"{campaign}_norm_{split}.h5")
+        with h5py.File(output_path, "w") as f_out:
+            for key, val in data.items():
+                f_out.create_dataset(key, data=val)
+        print(f"Saved renormalised concatenated {split} split to {output_path}")
 
 
 # ---------- Main Function ---------- #
 def main():
     """
-    Main entry point for preprocessing. Handles test, full, and renormalisation modes.
-    Loads ROOT files, applies cuts and normalization, and saves HDF5 splits.
+    Main entry point for preprocessing:
+    - Processes individual sub-campaigns (e.g., mc20a) from ROOT files.
+    - Or renormalises concatenated campaigns (mc20, mc23) if all required files exist.
     """
     apply_norm = not args.no_normalisation
 
     if args.campaign:
         tag = args.campaign
 
-        if tag == "mc20":
-            sub_tags = ["mc20a", "mc20d", "mc20e"]
-        elif tag == "mc23":
-            sub_tags = ["mc23a", "mc23d", "mc23e"]
-        else:
-            sub_tags = [tag]
-
-        train_files_exist = all(
-            os.path.exists(os.path.join(save_path, f"{sub}_norm_train.h5"))
-            for sub in sub_tags
-        )
-
-        if train_files_exist and apply_norm:
-            print(
-                f"Detected existing train splits for {tag}. Proceeding with renormalisation..."
-            )
-            renormalise_campaign(tag)
+        if tag in ["mc20", "mc23"]:
+            sub_tags = {
+                "mc20": ["mc20a", "mc20d", "mc20e"],
+                "mc23": ["mc23a", "mc23d", "mc23e"],
+            }[tag]
+            concatenate_and_renormalise(tag, sub_tags)
             return
 
         print("Preprocessing from ROOT files...")
-        dfs_withpu = []
-        dfs_nopu = []
+        df_withpu = load_and_process(
+            os.path.join(root_path, f"{tag}_withPU.root"),
+            label=0,
+            apply_norm=apply_norm,
+        )
+        df_nopu = load_and_process(
+            os.path.join(root_path, f"{tag}_noPU.root"), label=1, apply_norm=apply_norm
+        )
+        combined = {
+            key: np.concatenate([df_withpu[key], df_nopu[key]])
+            for key in df_withpu.keys()
+        }
 
-        for sub_tag in sub_tags:
-            df_withpu = load_and_process(
-                os.path.join(root_path, f"{sub_tag}_withPU.root"),
-                label=0,
-                apply_norm=apply_norm,
-            )
-            df_nopu = load_and_process(
-                os.path.join(root_path, f"{sub_tag}_noPU.root"),
-                label=1,
-                apply_norm=apply_norm,
-            )
-            dfs_withpu.append(df_withpu)
-            dfs_nopu.append(df_nopu)
-
-        df_combined = pd.concat(dfs_withpu + dfs_nopu, ignore_index=True)
-        train_df, val_df, test_df = split_data_full(df_combined)
-
+        train, val, test = split_data_full(combined)
+        suffix = "norm" if apply_norm else "raw"
         if apply_norm:
-            normalize_data(train_df, val_df, test_df, tag)
-            tag_suffix = "norm"
-        else:
-            tag_suffix = "raw"
-
-        save_split(train_df, tag, f"{tag_suffix}_train")
-        save_split(val_df, tag, f"{tag_suffix}_val")
-        save_split(test_df, tag, f"{tag_suffix}_test")
+            normalize_data(train, val, test, tag)
+        save_split(train, tag, f"{suffix}_train")
+        save_split(val, tag, f"{suffix}_val")
+        save_split(test, tag, f"{suffix}_test")
 
     elif args.full:
         print("Full mode activated...")
@@ -346,16 +312,18 @@ def main():
                 label=1,
                 apply_norm=apply_norm,
             )
-            df_combined = pd.concat([df_withpu, df_nopu], ignore_index=True)
-            train_df, val_df, test_df = split_data_full(df_combined)
+            combined = {
+                key: np.concatenate([df_withpu[key], df_nopu[key]])
+                for key in df_withpu.keys()
+            }
+
+            train, val, test = split_data_full(combined)
+            suffix = "norm" if apply_norm else "raw"
             if apply_norm:
-                normalize_data(train_df, val_df, test_df, tag)
-                tag_suffix = "norm"
-            else:
-                tag_suffix = "raw"
-            save_split(train_df, tag, f"{tag_suffix}_train")
-            save_split(val_df, tag, f"{tag_suffix}_val")
-            save_split(test_df, tag, f"{tag_suffix}_test")
+                normalize_data(train, val, test, tag)
+            save_split(train, tag, f"{suffix}_train")
+            save_split(val, tag, f"{suffix}_val")
+            save_split(test, tag, f"{suffix}_test")
 
 
 if __name__ == "__main__":
