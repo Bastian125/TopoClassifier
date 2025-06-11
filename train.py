@@ -328,40 +328,83 @@ def plot_prediction_histogram(y_true, y_pred, prefix_path):
     plt.close()
     print(f"Probability histogram saved to {hist_path}")
 
+def compute_iqr(x):
+    """
+    Computes interquartile range to be used in cluster_response comparisons.
+    """
+    q75, q25 = np.percentile(x, [75, 25])
+    return q75 - q25
 
-def plot_cluster_response_histogram(
+
+def plot_cluster_response_comparison_histogram(
     true_response, y_pred_probs, prefix_path, threshold=0.5
 ):
     """
-    Plot a histogram of true cluster_response values for clusters where the model predicted hard-scatter.
+    Plot step histogram of cluster_response:
+    - Full distribution
+    - Subset selected by model as hard-scatter (y_pred ≥ threshold)
 
     Args:
-        true_response (np.ndarray): The true cluster_response values.
-        y_pred_probs (np.ndarray): The predicted probabilities (after sigmoid).
-        prefix_path (str): Path prefix for saving the PDF.
-        threshold (float): Decision threshold for hard-scatter classification.
+        true_response (np.ndarray): All cluster_response values.
+        y_pred_probs (np.ndarray): Predicted probabilities (after sigmoid).
+        prefix_path (str): Output prefix for saving.
+        threshold (float): Classification threshold.
     """
-    true_response = np.array(true_response)
-    y_pred_probs = np.array(y_pred_probs)
+    true_response = np.asarray(true_response)
+    y_pred_probs = np.asarray(y_pred_probs)
 
-    # Filter: keep only clusters predicted as hard-scatter
-    mask = y_pred_probs >= threshold
-    selected_response = true_response[mask]
+    if len(true_response) != len(y_pred_probs):
+        raise ValueError("Length mismatch between true_response and y_pred_probs.")
 
+    # Mask for DNN-selected hard-scatter clusters
+    selection_mask = y_pred_probs >= threshold
+    selected_response = true_response[selection_mask]
+
+    # Compute iqr
+    iqr_full = compute_iqr(true_response)
+    iqr_selected = compute_iqr(selected_response)
+
+    # Skip if empty
+    if selected_response.size == 0:
+        print("No selected clusters above threshold. Skipping response plot.")
+        return
+
+    # Plotting
     plt.figure(figsize=(8, 6))
-    plt.hist(selected_response, bins=50, alpha=0.75, color="C0")
-    plt.xlabel("cluster_response")
-    plt.ylabel("Count")
-    plt.title(
-        f"cluster_response distribution (predicted hard-scatter, threshold ≥ {threshold:.2f})"
+    nbins = 100
+    beginning = 0
+    end = 100
+    hrange = [beginning, end]
+    lim = (beginning, end)
+
+    plt.hist(
+        true_response,
+        bins=nbins,
+        range=hrange,
+        histtype="step",
+        density=True,
+        label=f"All clusters IQR = {iqr_full:.2f}",
     )
-    plt.grid(True)
+    plt.hist(
+        selected_response,
+        bins=nbins,
+        range=hrange,
+        histtype="step",
+        density=True,
+        label=f"Selected (≥ {threshold:.2f})\nIQR = {iqr_selected:.2f}",
+    )
+
+    plt.yscale("log")
+    plt.xlabel("Response")
+    plt.ylabel("Relative number of clusters")
+    plt.xlim(lim)
+    plt.legend()
+    plt.tight_layout()
 
     out_path = prefix_path + "_cluster_response_hist.pdf"
-    plt.tight_layout()
     plt.savefig(out_path)
     plt.close()
-    print(f"cluster_response histogram saved to {out_path}")
+    print(f"Step histogram saved to {out_path}")
 
 
 def train_model(model, train_loader, val_loader, criterion, optimizer):
@@ -559,12 +602,15 @@ def main():
                 if line.startswith("Best threshold:"):
                     best_threshold = float(line.split(":")[1].strip())
 
-        plot_cluster_response_histogram(
-            true_response=test_dataset.get_target_array("cluster_response"),
-            y_pred_probs=y_pred,
-            prefix_path=roc_prefix_test,
-            threshold=best_threshold,
-        )
+        with h5py.File(test_file, "r") as f:
+            cluster_response = f["cluster_response"][:]
+
+    plot_cluster_response_comparison_histogram(
+        true_response=cluster_response,
+        y_pred_probs=y_pred,
+        prefix_path=roc_prefix_test,
+        threshold=best_threshold,
+    )
 
     if args.plot:
         history_path = os.path.join(output_dir, f"{model_str}_history.h5")
