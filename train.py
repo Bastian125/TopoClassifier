@@ -79,6 +79,11 @@ parser.add_argument(
     action="store_true",
     help="Plot training history of the model trained on --train_campaign.",
 )
+parser.add_argument(
+    "--feature_importance",
+    action="store_true",
+    help="Plots feature importance for model trained on --train_campaign and tested on --test_campaign.",
+)
 
 model_group = parser.add_mutually_exclusive_group(required=True)
 model_group.add_argument(
@@ -328,6 +333,7 @@ def plot_prediction_histogram(y_true, y_pred, prefix_path):
     plt.close()
     print(f"Probability histogram saved to {hist_path}")
 
+
 def compute_iqr(x):
     """
     Computes interquartile range to be used in cluster_response comparisons.
@@ -405,6 +411,78 @@ def plot_cluster_response_comparison_histogram(
     plt.savefig(out_path)
     plt.close()
     print(f"Step histogram saved to {out_path}")
+
+
+def plot_permutation_importance(
+    model, dataset, feature_names, prefix_path, device="cpu", batch_size=1024
+):
+    """
+    Computes and plots feature permutation importance using AUC drop.
+    Uses DataLoader batching to prevent memory issues.
+    """
+    from sklearn.metrics import roc_auc_score
+    from torch.utils.data import TensorDataset, DataLoader
+
+    device = torch.device(device)
+    model = model.to(device)
+    model.eval()
+
+    original_X, y_true = dataset.get_all_data()
+    y_true_tensor = torch.tensor(y_true, dtype=torch.float32)
+
+    # Baseline predictions
+    base_preds = []
+    base_loader = DataLoader(
+        TensorDataset(torch.tensor(original_X, dtype=torch.float32)),
+        batch_size=batch_size,
+        shuffle=False,
+    )
+    with torch.no_grad():
+        for batch in base_loader:
+            inputs = batch[0].to(device)
+            outputs = torch.sigmoid(model(inputs)).cpu().numpy().flatten()
+            base_preds.extend(outputs)
+    base_score = roc_auc_score(y_true, base_preds)
+
+    # Permutation importance
+    importances = []
+
+    for i, feat in enumerate(feature_names):
+        X_permuted = original_X.copy()
+        np.random.shuffle(X_permuted[:, i])
+
+        perm_preds = []
+        perm_loader = DataLoader(
+            TensorDataset(torch.tensor(X_permuted, dtype=torch.float32)),
+            batch_size=batch_size,
+            shuffle=False,
+        )
+
+        with torch.no_grad():
+            for batch in perm_loader:
+                inputs = batch[0].to(device)
+                outputs = torch.sigmoid(model(inputs)).cpu().numpy().flatten()
+                perm_preds.extend(outputs)
+
+        perm_score = roc_auc_score(y_true, perm_preds)
+        importances.append(base_score - perm_score)
+
+    # Sort and plot
+    sorted_idx = np.argsort(importances)[::-1]
+    sorted_features = np.array(feature_names)[sorted_idx]
+    sorted_importances = np.array(importances)[sorted_idx]
+
+    plt.figure(figsize=(10, 6))
+    plt.barh(sorted_features, sorted_importances)
+    plt.xlabel("Drop in AUC")
+    plt.title("Permutation Feature Importance")
+    plt.gca().invert_yaxis()
+    plt.tight_layout()
+
+    plot_path = prefix_path + "_permutation_importance.pdf"
+    plt.savefig(plot_path)
+    plt.close()
+    print(f"Permutation importance plot saved to {plot_path}")
 
 
 def train_model(model, train_loader, val_loader, criterion, optimizer):
@@ -592,9 +670,17 @@ def main():
         roc_prefix_test = os.path.join(
             test_out_dir, f"{model_str}_on_{args.test_campaign}"
         )
+        # Start plotting
         plot_roc_curve(y_true, y_pred, prefix_path=roc_prefix_test)
         plot_precision_recall(y_true, y_pred, prefix_path=roc_prefix_test)
         plot_prediction_histogram(y_true, y_pred, prefix_path=roc_prefix_test)
+        if args.feature_importance:
+            plot_permutation_importance(
+                model=model,
+                dataset=test_dataset,
+                feature_names=feature_keys,
+                prefix_path=roc_prefix_test,
+            )
 
         # Load from threshold TXT
         with open(roc_prefix_test + "_threshold.txt") as f:
