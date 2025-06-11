@@ -36,3 +36,10 @@ class HDF5Dataset(Dataset):
         """
         with h5py.File(self.file_path, "r") as f:
             return np.array(f[target_key])
+
+    def get_all_data(self):
+        """
+        Returns the full feature matrix and label vector as NumPy arrays.
+        Useful for analysis like permutation importance.
+        """
+        return self.data.numpy(), self.labels.numpy()
