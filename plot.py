@@ -169,7 +169,7 @@ def plot_response(campaign):
     )
     plt.yscale("log")
     plt.xlabel(r"Response")
-    plt.ylabel(r"Number of clusters")
+    plt.ylabel(r"Relative number of clusters")
     plt.xlim(lim)
     plt.legend()
     plt.tight_layout()
