@@ -187,12 +187,16 @@ def concatenate_and_renormalise(campaign, sub_campaigns):
     """
     Concatenate train/val/test splits of sub-campaigns, recompute mean/std, reapply normalization.
     """
-    required_files = [
-        os.path.join(save_path, f"{sub}_norm_train.h5") for sub in sub_campaigns
-    ]
+    required_files = []
+    for sub in sub_campaigns:
+        for split in ["train", "val", "test"]:
+            required_files.append(os.path.join(save_path, f"{sub}_norm_{split}.h5"))
     if not all(os.path.exists(f) for f in required_files):
-        print(f"Skipping renormalisation: missing required files for {campaign}.")
+        print(
+            f"Skipping renormalisation: missing one or more split files for {campaign}."
+        )
         return
+
     print(f"\nRenormalising and concatenating {campaign}...")
     combined_data = {split: {} for split in ["train", "val", "test"]}
     for split in ["train", "val", "test"]:
@@ -251,7 +255,7 @@ def concatenate_and_renormalise(campaign, sub_campaigns):
 def main():
     if args.print_features:
         list_root_features(os.path.join(root_path, "mc20a_withPU.root"))
-
+        return
 
     apply_norm = not args.no_normalisation
     if args.campaign:
