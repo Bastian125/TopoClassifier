@@ -37,6 +37,8 @@ columns = [
     "cluster_SIGNIFICANCE",
     "nPrimVtx",
     "avgMu",
+    "jetRawEta",
+    "jetRawE",
 ]
 
 log_features = [
