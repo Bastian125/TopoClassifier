@@ -100,13 +100,15 @@ def compute_response_and_mask(df):
     df["cluster_response"] = response
     return response > 0.1
 
+
 def compute_jet_features(df):
     """
     Computes jet features.
     """
     df["diffEta"] = df["clusterEta"] - df["jetRawEta"]
-    df["energy_fraction"] = df["clusterE"]/df["jetRawE"]
+    df["energy_fraction"] = df["clusterE"] / df["jetRawE"]
     return
+
 
 def load_and_process(file_path, label, apply_norm):
     """
@@ -183,8 +185,11 @@ def normalize_data(train, val, test, tag):
         x = np.cbrt(np.abs(split["cluster_time"])) * np.sign(split["cluster_time"])
         split["cluster_time"] = (x - mean) / std
         split["cluster_time"][~np.isfinite(split["cluster_time"])] = 0
+        # Compute derived jet features on normalized data
+        compute_jet_features(split)
+
     stats_lines.append(f"cluster_time (cbrt): mean = {mean:.6f}, std = {std:.6f}\n")
-    stats_path = os.path.join(save_path, f"{tag}_stats.txt")
+    stats_path = os.path.join(save_path, f"{tag}_norm_stats.txt")
     with open(stats_path, "w") as f:
         f.writelines(stats_lines)
     print(f"Saved normalization stats to {stats_path}")
@@ -231,74 +236,6 @@ def load_multiple_campaigns(campaigns, apply_norm):
     return {k: np.concatenate(v) for k, v in combined_data.items()}
 
 
-def concatenate_and_renormalise(campaign, sub_campaigns):
-    """
-    Concatenate train/val/test splits of sub-campaigns, recompute mean/std, reapply normalization.
-    """
-    required_files = []
-    for sub in sub_campaigns:
-        for split in ["train", "val", "test"]:
-            required_files.append(os.path.join(save_path, f"{sub}_norm_{split}.h5"))
-    if not all(os.path.exists(f) for f in required_files):
-        print(
-            f"Skipping renormalisation: missing one or more split files for {campaign}."
-        )
-        return
-
-    print(f"\nRenormalising and concatenating {campaign}...")
-    combined_data = {split: {} for split in ["train", "val", "test"]}
-    for split in ["train", "val", "test"]:
-        for sub in sub_campaigns:
-            file_path = os.path.join(save_path, f"{sub}_norm_{split}.h5")
-            if not os.path.exists(file_path):
-                print(f"Missing {file_path}, skipping renormalisation.")
-                return
-            with h5py.File(file_path, "r") as f:
-                for key in f.keys():
-                    combined_data[split].setdefault(key, []).append(f[key][:])
-        combined_data[split] = {
-            key: np.concatenate(arrays) for key, arrays in combined_data[split].items()
-        }
-    train = combined_data["train"]
-    stats_lines = [f"Recomputed normalization statistics for {campaign}\n"]
-    norm_stats = {}
-    for feature in log_features + normal_features:
-        finite_mask = np.isfinite(train[feature])
-        if not np.any(finite_mask):
-            print(f"Warning: No finite values for {feature}. Skipping normalization.")
-            continue
-        mean = train[feature][finite_mask].mean()
-        std = train[feature][finite_mask].std()
-        norm_stats[feature] = (mean, std)
-        stats_lines.append(f"{feature}: mean = {mean:.6f}, std = {std:.6f}\n")
-    x = np.cbrt(np.abs(train["cluster_time"])) * np.sign(train["cluster_time"])
-    finite_mask = np.isfinite(x)
-    mean_time = x[finite_mask].mean()
-    std_time = x[finite_mask].std()
-    stats_lines.append(
-        f"cluster_time (cbrt): mean = {mean_time:.6f}, std = {std_time:.6f}\n"
-    )
-    stats_path = os.path.join(save_path, f"{campaign}_norm_stats.txt")
-    with open(stats_path, "w") as f:
-        f.writelines(stats_lines)
-    print(f"Saved new normalization stats to {stats_path}")
-    for split, data in combined_data.items():
-        for feature in log_features + normal_features:
-            if feature not in norm_stats:
-                continue
-            mean, std = norm_stats[feature]
-            data[feature] = (data[feature] - mean) / std
-            data[feature][~np.isfinite(data[feature])] = 0
-        x = np.cbrt(np.abs(data["cluster_time"])) * np.sign(data["cluster_time"])
-        data["cluster_time"] = (x - mean_time) / std_time
-        data["cluster_time"][~np.isfinite(data["cluster_time"])] = 0
-        output_path = os.path.join(save_path, f"{campaign}_norm_{split}.h5")
-        with h5py.File(output_path, "w") as f_out:
-            for key, val in data.items():
-                f_out.create_dataset(key, data=val)
-        print(f"Saved renormalised concatenated {split} split to {output_path}")
-
-
 # ---------- Main ---------- #
 def main():
     if args.print_features:
@@ -306,6 +243,7 @@ def main():
         return
 
     apply_norm = not args.no_normalisation
+
     if args.campaign:
         tag = args.campaign
         if tag in ["mc20", "mc23"]:
@@ -314,19 +252,36 @@ def main():
                 "mc23": ["mc23a", "mc23d", "mc23e"],
             }[tag]
 
-            print(f"Preprocessing {tag} from raw ROOT files...")
+            print(f"Preprocessing combined campaign: {tag}")
             combined = load_multiple_campaigns(sub_tags, apply_norm=apply_norm)
 
-            train, val, test = split_data_full(combined)
-            suffix = "norm" if apply_norm else "raw"
-            if apply_norm:
-                normalize_data(train, val, test, tag)
-            save_split(train, tag, f"{suffix}_train")
-            save_split(val, tag, f"{suffix}_val")
-            save_split(test, tag, f"{suffix}_test")
-            return
+        else:
+            print(f"Processing individual campaign: {tag}")
+            df_withpu = load_and_process(
+                os.path.join(root_path, f"{tag}_withPU.root"),
+                label=0,
+                apply_norm=apply_norm,
+            )
+            df_nopu = load_and_process(
+                os.path.join(root_path, f"{tag}_noPU.root"),
+                label=1,
+                apply_norm=apply_norm,
+            )
+            combined = {
+                key: np.concatenate([df_withpu[key], df_nopu[key]])
+                for key in df_withpu.keys()
+            }
 
-    elif args.full:
+        train, val, test = split_data_full(combined)
+        suffix = "norm" if apply_norm else "raw"
+        if apply_norm:
+            normalize_data(train, val, test, tag)
+        save_split(train, tag, f"{suffix}_train")
+        save_split(val, tag, f"{suffix}_val")
+        save_split(test, tag, f"{suffix}_test")
+        return
+
+    if args.full:
         print("Full mode activated...")
         tags = ["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"]
         for tag in tags:
