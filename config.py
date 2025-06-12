@@ -53,6 +53,7 @@ log_features = [
     "cluster_DELTA_ALPHA",
     "cluster_SECOND_LAMBDA",
     "cluster_CELL_SIGNIFICANCE",
+    "jetRawE",
 ]
 
 normal_features = [
@@ -73,6 +74,7 @@ normal_features = [
     "cluster_DELTA_PHI",
     "clusterPhi",
     "cluster_LONGITUDINAL",
+    "jetRawEta",
 ]
 
 # ---------- Plot Configuration ---------- #
