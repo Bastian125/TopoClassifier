@@ -414,7 +414,7 @@ def plot_cluster_response_comparison_histogram(
 
 
 def plot_permutation_importance(
-    model, dataset, feature_names, prefix_path, device="cpu", batch_size=1024
+    model, dataset, feature_names, prefix_path, device="cpu", batch_size=10000
 ):
     """
     Computes and plots feature permutation importance using AUC drop.
