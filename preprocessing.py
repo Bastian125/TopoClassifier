@@ -102,18 +102,28 @@ def compute_response_and_mask(df):
 
 def load_and_process(file_path, label, apply_norm):
     """
-    Load ROOT file, apply physics cuts, pile-up cut (if label 0), and compute response.
+    Load ROOT file, apply cuts, compute response, and optionally apply high-pile-up cut.
     """
     print(f"Loading {file_path}...")
     tree = uproot.open(file_path)["ClusterTree;1"]
     df = tree.arrays(columns, library="np")
     length_before_cuts = len(df["clusterE"])
+
+    # Apply physics cuts first
     mask = apply_cuts_mask(df)
+
+    # High pile-up cut (only for background)
     if label == 0 and apply_norm:
         mask &= apply_high_pile_up_cut_mask(df)
-    mask &= compute_response_and_mask(df)
+
+    # Apply mask before computing response
     df = {key: val[mask] for key, val in df.items()}
+
+    # Now compute response
+    response_mask = compute_response_and_mask(df)
+    df = {key: val[response_mask] for key, val in df.items()}
     df["label"] = np.full_like(df["clusterE"], label)
+
     print(
         f"  -> {len(df['clusterE'])}/{length_before_cuts} entries retained after all cuts\n"
     )
@@ -181,6 +191,36 @@ def save_split(df, base_name, tag):
         for key, val in df.items():
             f.create_dataset(key, data=val)
     print(f"Saved {tag} split to {output_path}")
+
+
+def load_multiple_campaigns(campaigns, apply_norm):
+    """
+    Loads and concatenates multiple sub-campaigns (e.g., mc20a, mc20d, mc20e).
+    """
+    combined_data = {}
+    for tag in campaigns:
+        print(f"Loading sub-campaign: {tag}")
+        df_withpu = load_and_process(
+            os.path.join(root_path, f"{tag}_withPU.root"),
+            label=0,
+            apply_norm=apply_norm,
+        )
+        df_nopu = load_and_process(
+            os.path.join(root_path, f"{tag}_noPU.root"),
+            label=1,
+            apply_norm=apply_norm,
+        )
+        df_combined = {
+            key: np.concatenate([df_withpu[key], df_nopu[key]])
+            for key in df_withpu.keys()
+        }
+        if not combined_data:
+            combined_data = {k: [v] for k, v in df_combined.items()}
+        else:
+            for k in combined_data:
+                combined_data[k].append(df_combined[k])
+    # Final merge
+    return {k: np.concatenate(v) for k, v in combined_data.items()}
 
 
 def concatenate_and_renormalise(campaign, sub_campaigns):
@@ -265,28 +305,19 @@ def main():
                 "mc20": ["mc20a", "mc20d", "mc20e"],
                 "mc23": ["mc23a", "mc23d", "mc23e"],
             }[tag]
-            concatenate_and_renormalise(tag, sub_tags)
+
+            print(f"Preprocessing {tag} from raw ROOT files...")
+            combined = load_multiple_campaigns(sub_tags, apply_norm=apply_norm)
+
+            train, val, test = split_data_full(combined)
+            suffix = "norm" if apply_norm else "raw"
+            if apply_norm:
+                normalize_data(train, val, test, tag)
+            save_split(train, tag, f"{suffix}_train")
+            save_split(val, tag, f"{suffix}_val")
+            save_split(test, tag, f"{suffix}_test")
             return
-        print("Preprocessing from ROOT files...")
-        df_withpu = load_and_process(
-            os.path.join(root_path, f"{tag}_withPU.root"),
-            label=0,
-            apply_norm=apply_norm,
-        )
-        df_nopu = load_and_process(
-            os.path.join(root_path, f"{tag}_noPU.root"), label=1, apply_norm=apply_norm
-        )
-        combined = {
-            key: np.concatenate([df_withpu[key], df_nopu[key]])
-            for key in df_withpu.keys()
-        }
-        train, val, test = split_data_full(combined)
-        suffix = "norm" if apply_norm else "raw"
-        if apply_norm:
-            normalize_data(train, val, test, tag)
-        save_split(train, tag, f"{suffix}_train")
-        save_split(val, tag, f"{suffix}_val")
-        save_split(test, tag, f"{suffix}_test")
+
     elif args.full:
         print("Full mode activated...")
         tags = ["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"]
