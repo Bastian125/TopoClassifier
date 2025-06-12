@@ -81,6 +81,7 @@ def apply_cuts_mask(df):
         & (df["cluster_FIRST_ENG_DENS"] > 0.0)
         & (df["cluster_SECOND_TIME"] > 0.0)
         & (df["cluster_SIGNIFICANCE"] > 0.0)
+        & (df["jetRawE"] > 0.0)
     )
 
 
@@ -99,6 +100,13 @@ def compute_response_and_mask(df):
     df["cluster_response"] = response
     return response > 0.1
 
+def compute_jet_features(df):
+    """
+    Computes jet features.
+    """
+    df["diffEta"] = df["clusterEta"] - df["jetRawEta"]
+    df["energy_fraction"] = df["clusterE"]/df["jetRawE"]
+    return
 
 def load_and_process(file_path, label, apply_norm):
     """
