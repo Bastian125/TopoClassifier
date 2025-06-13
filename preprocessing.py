@@ -113,11 +113,23 @@ def compute_response_and_mask(df):
 
 def compute_jet_features(df):
     """
-    Computes zT, zL, zRel, and diffEta between cluster and jet using pt, eta, phi.
-    Adds them to the df dictionary.
+    Computes zT, zL, zRel, and diffEta between cluster and jet using pt, eta, phi and adds them to df.
     """
+    # Compute cluster and jet cartesian pt vectors
+    cluster_vec = to_cartesian(df["clusterPt"], df["clusterEta"], df["clusterPhi"])
+    jet_vec = to_cartesian(df["jetRawPt"], df["jetRawEta"], df["jetRawPhi"])
+
+    # Compute magnitude of cluster and jet vectors
+    jet_mag2 = np.sum(jet_vec**2, axis=1)
+    dot_product = np.sum(cluster_vec * jet_vec, axis=1)
+    cross_product_mag = np.linalg.norm(np.cross(cluster_vec, jet_vec), axis=1)
+
+    # Compute variables
     df["diffEta"] = df["clusterEta"] - df["jetRawEta"]
-    df["energy_fraction"] = df["clusterE"] / df["jetRawE"]
+    df["zT"] = df["clusterPt"] / df["jetRawPt"]
+    df["zL"] = dot_product / jet_mag2
+    df["zRel"] = cross_product_mag / jet_mag2
+
     return
 
 
