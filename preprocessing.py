@@ -70,6 +70,16 @@ def list_root_features(file_path):
             print(name)
 
 
+def to_cartesian(pt, eta, phi):
+    """
+    Transforms vector from ATLAS (spherical) coordinates to cartesian coordinates.
+    """
+    px = pt * np.cos(phi)
+    py = pt * np.sin(phi)
+    pz = pt * np.sinh(eta)
+    return np.stack((px, py, pz), axis=1)
+
+
 def apply_cuts_mask(df):
     """
     Returns boolean mask for physics-motivated cuts on clusters.
@@ -103,7 +113,8 @@ def compute_response_and_mask(df):
 
 def compute_jet_features(df):
     """
-    Computes jet features.
+    Computes zT, zL, zRel, and diffEta between cluster and jet using pt, eta, phi.
+    Adds them to the df dictionary.
     """
     df["diffEta"] = df["clusterEta"] - df["jetRawEta"]
     df["energy_fraction"] = df["clusterE"] / df["jetRawE"]
