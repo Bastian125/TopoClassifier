@@ -113,7 +113,8 @@ def compute_response_and_mask(df):
 
 def compute_jet_features(df):
     """
-    Computes zT, zL, zRel, and diffEta between cluster and jet using pt, eta, phi and adds them to df.
+    Computes zT, zL, zRel, and diffEta between cluster and jet using pt, eta, phi and adds them to df dictionary.
+    Not needed cluster and jet features are dropped to keep hdf5 file size small.
     """
     # Compute cluster and jet cartesian pt vectors
     cluster_vec = to_cartesian(df["clusterPt"], df["clusterEta"], df["clusterPhi"])
@@ -130,6 +131,9 @@ def compute_jet_features(df):
     df["zL"] = dot_product / jet_mag2
     df["zRel"] = cross_product_mag / jet_mag2
 
+    # Drop not needed cluster and jet features
+    for key in ["jetRawEta", "jetRawPhi", "jetRawPt", "clusterPt"]:
+        df.pop(key, None)
     return
 
 
