@@ -188,10 +188,20 @@ def split_data_full(df):
 
 def normalize_data(train, val, test, tag):
     """
-    Recompute mean/std for all features. Log10 features are already log-transformed, so mean/std only.
+    Applies log10 scaling to log_features, and standard scaling to normal_features.
+    Also applies cube-root normalization to cluster_time.
     """
     stats_lines = [f"Normalization statistics for {tag}\n"]
-    for feature in log_features + normal_features:
+
+    # Apply log10 scaling ONLY for log_features
+    for feature in log_features:
+        for split in [train, val, test]:
+            split[feature] = np.log10(split[feature])
+            split[feature][~np.isfinite(split[feature])] = 0
+        stats_lines.append(f"{feature}: log10 scaled only (no standardization)\n")
+
+    # Apply standard scaling for normal_features
+    for feature in normal_features:
         finite_mask = np.isfinite(train[feature])
         if not np.any(finite_mask):
             print(f"Warning: No finite values for {feature}. Skipping normalization.")
@@ -199,23 +209,29 @@ def normalize_data(train, val, test, tag):
         mean = train[feature][finite_mask].mean()
         std = train[feature][finite_mask].std()
         for split in [train, val, test]:
-            split[feature] = (split[feature] - mean) / std
-            split[feature][~np.isfinite(split[feature])] = 0
+            x = split[feature]
+            x = (x - mean) / std
+            x[~np.isfinite(x)] = 0
+            split[feature] = x
         stats_lines.append(f"{feature}: mean = {mean:.6f}, std = {std:.6f}\n")
+
+    # Normalize cluster_time with cube-root scaling
     x_train_time = np.cbrt(np.abs(train["cluster_time"])) * np.sign(
         train["cluster_time"]
     )
     finite_mask = np.isfinite(x_train_time)
     mean = x_train_time[finite_mask].mean()
     std = x_train_time[finite_mask].std()
+
     for split in [train, val, test]:
         x = np.cbrt(np.abs(split["cluster_time"])) * np.sign(split["cluster_time"])
-        split["cluster_time"] = (x - mean) / std
-        split["cluster_time"][~np.isfinite(split["cluster_time"])] = 0
-        # Compute derived jet features on normalized data
-        compute_jet_features(split)
+        x = (x - mean) / std
+        x[~np.isfinite(x)] = 0
+        split["cluster_time"] = x
 
     stats_lines.append(f"cluster_time (cbrt): mean = {mean:.6f}, std = {std:.6f}\n")
+
+    # Save statistics
     stats_path = os.path.join(save_path, f"{tag}_norm_stats.txt")
     with open(stats_path, "w") as f:
         f.writelines(stats_lines)
@@ -273,26 +289,38 @@ def main():
 
     if args.campaign:
         tag = args.campaign
+
+        if not apply_norm:
+            print(f"Processing raw mode for campaign: {tag}")
+
+            for label_name, label in [("withPU", 0), ("noPU", 1)]:
+                df = load_and_process(
+                    os.path.join(root_path, f"{tag}_{label_name}.root"),
+                    label=label,
+                    apply_norm=False,
+                )
+                compute_jet_features(df)
+                save_split(df, tag, f"{label_name}_raw")
+            return
+
         if tag in ["mc20", "mc23"]:
             sub_tags = {
                 "mc20": ["mc20a", "mc20d", "mc20e"],
                 "mc23": ["mc23a", "mc23d", "mc23e"],
             }[tag]
-
             print(f"Preprocessing combined campaign: {tag}")
-            combined = load_multiple_campaigns(sub_tags, apply_norm=apply_norm)
-
+            combined = load_multiple_campaigns(sub_tags, apply_norm=True)
         else:
             print(f"Processing individual campaign: {tag}")
             df_withpu = load_and_process(
                 os.path.join(root_path, f"{tag}_withPU.root"),
                 label=0,
-                apply_norm=apply_norm,
+                apply_norm=True,
             )
             df_nopu = load_and_process(
                 os.path.join(root_path, f"{tag}_noPU.root"),
                 label=1,
-                apply_norm=apply_norm,
+                apply_norm=True,
             )
             combined = {
                 key: np.concatenate([df_withpu[key], df_nopu[key]])
@@ -300,12 +328,15 @@ def main():
             }
 
         train, val, test = split_data_full(combined)
-        suffix = "norm" if apply_norm else "raw"
-        if apply_norm:
-            normalize_data(train, val, test, tag)
-        save_split(train, tag, f"{suffix}_train")
-        save_split(val, tag, f"{suffix}_val")
-        save_split(test, tag, f"{suffix}_test")
+        normalize_data(train, val, test, tag)
+
+        compute_jet_features(train)
+        compute_jet_features(val)
+        compute_jet_features(test)
+
+        save_split(train, tag, "norm_train")
+        save_split(val, tag, "norm_val")
+        save_split(test, tag, "norm_test")
         return
 
     if args.full:
@@ -313,27 +344,43 @@ def main():
         tags = ["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"]
         for tag in tags:
             print(f"Processing {tag}...")
+
+            if not apply_norm:
+                for label_name, label in [("withPU", 0), ("noPU", 1)]:
+                    df = load_and_process(
+                        os.path.join(root_path, f"{tag}_{label_name}.root"),
+                        label=label,
+                        apply_norm=False,
+                    )
+                    compute_jet_features(df)
+                    save_split(df, tag, f"{label_name}_raw")
+                continue
+
             df_withpu = load_and_process(
                 os.path.join(root_path, f"{tag}_withPU.root"),
                 label=0,
-                apply_norm=apply_norm,
+                apply_norm=True,
             )
             df_nopu = load_and_process(
                 os.path.join(root_path, f"{tag}_noPU.root"),
                 label=1,
-                apply_norm=apply_norm,
+                apply_norm=True,
             )
             combined = {
                 key: np.concatenate([df_withpu[key], df_nopu[key]])
                 for key in df_withpu.keys()
             }
+
             train, val, test = split_data_full(combined)
-            suffix = "norm" if apply_norm else "raw"
-            if apply_norm:
-                normalize_data(train, val, test, tag)
-            save_split(train, tag, f"{suffix}_train")
-            save_split(val, tag, f"{suffix}_val")
-            save_split(test, tag, f"{suffix}_test")
+            normalize_data(train, val, test, tag)
+
+            compute_jet_features(train)
+            compute_jet_features(val)
+            compute_jet_features(test)
+
+            save_split(train, tag, "norm_train")
+            save_split(val, tag, "norm_val")
+            save_split(test, tag, "norm_test")
 
 
 if __name__ == "__main__":
