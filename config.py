@@ -38,7 +38,9 @@ columns = [
     "nPrimVtx",
     "avgMu",
     "jetRawEta",
+    "jetRawPhi",
     "jetRawE",
+    "jetRawPt",
 ]
 
 log_features = [
@@ -54,6 +56,7 @@ log_features = [
     "cluster_SECOND_LAMBDA",
     "cluster_CELL_SIGNIFICANCE",
     "jetRawE",
+    "jetRawPt",
 ]
 
 normal_features = [
@@ -75,6 +78,9 @@ normal_features = [
     "clusterPhi",
     "cluster_LONGITUDINAL",
     "jetRawEta",
+    "jetRawPhi",
+    "nPrimVtx",
+    "avgMu",
 ]
 
 # ---------- Plot Configuration ---------- #
