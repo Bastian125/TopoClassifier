@@ -12,6 +12,7 @@ output_path = "/ceph/e4/users/bschuchardt/public/MA/TopoClassifier/output"
 # ---------- Feature Columns ---------- #
 columns = [
     "clusterE",
+    "clusterPt",
     "cluster_FIRST_ENG_DENS",
     "cluster_EM_PROBABILITY",
     "cluster_CENTER_LAMBDA",
@@ -45,6 +46,7 @@ columns = [
 
 log_features = [
     "clusterE",
+    "clusterPt",
     "cluster_FIRST_ENG_DENS",
     "cluster_CENTER_LAMBDA",
     "cluster_nCells_tot",
