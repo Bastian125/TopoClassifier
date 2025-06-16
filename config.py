@@ -85,6 +85,46 @@ normal_features = [
     "avgMu",
 ]
 
+cluster_features = [
+    "clusterE",
+    "clusterPt",
+    "cluster_FIRST_ENG_DENS",
+    "cluster_EM_PROBABILITY",
+    "cluster_CENTER_LAMBDA",
+    "cluster_CENTER_MAG",
+    "cluster_nCells_tot",
+    "cluster_ENG_FRAC_EM",
+    "cluster_SECOND_TIME",
+    "cluster_AVG_TILE_Q",
+    "cluster_AVG_LAR_Q",
+    "cluster_SECOND_R",
+    "cluster_LATERAL",
+    "cluster_time",
+    "cluster_ISOLATION",
+    "cluster_DELTA_ALPHA",
+    "cluster_DELTA_THETA",
+    "clusterEta",
+    "cluster_DELTA_PHI",
+    "clusterPhi",
+    "cluster_SECOND_LAMBDA",
+    "cluster_LONGITUDINAL",
+    "cluster_CELL_SIGNIFICANCE",
+    "cluster_ENG_CALIB_TOT",
+    "cluster_SIGNIFICANCE",
+]
+
+jet_features = [
+    "jetRawEta",
+    "jetRawPhi",
+    "jetRawE",
+    "jetRawPt",
+]
+
+evironment_features = [
+    "nPrimVtx",
+    "avgMu",
+]
+
 # ---------- Plot Configuration ---------- #
 plot_settings = {
     "avgMu": {
