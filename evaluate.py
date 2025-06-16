@@ -17,6 +17,15 @@ from sklearn.metrics import (
 
 
 # ---------- Helper Functions ---------- #
+def remove_prefix_from_state_dict(state_dict, prefix="_orig_mod."):
+    """Remove prefix from state_dict keys. Storing the compiled model in PyTorch
+    adds _orig_mod which must be removed for proper testing."""
+    return {
+        k.replace(prefix, "") if k.startswith(prefix) else k: v
+        for k, v in state_dict.items()
+    }
+
+
 def plot_roc_curve(y_true, y_pred, prefix_path):
     """
     Plot and save ROC curve with best threshold using Youden's J statistic.

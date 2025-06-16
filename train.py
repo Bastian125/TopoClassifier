@@ -21,8 +21,16 @@ from tqdm import tqdm
 from config import data_save_path, output_path
 from io_utils import ensure_dir_exists
 from dataloader import HDF5Dataset
-from models import *
-from evaluate import *
+from models import DNNModel
+from evaluate import (
+    plot_roc_curve,
+    plot_precision_recall,
+    plot_prediction_histogram,
+    plot_permutation_importance,
+    plot_cluster_response_comparison_histogram,
+    remove_prefix_from_state_dict,
+)
+
 
 # ---------- File Config ---------- #
 feature_keys = [
@@ -131,15 +139,6 @@ else:
 
 
 # ---------- Helper Functions ---------- #
-def remove_prefix_from_state_dict(state_dict, prefix="_orig_mod."):
-    """Remove prefix from state_dict keys. Storing the compiled model in PyTorch
-    adds _orig_mod which must be removed for proper testing."""
-    return {
-        k.replace(prefix, "") if k.startswith(prefix) else k: v
-        for k, v in state_dict.items()
-    }
-
-
 def plot_training_history(history):
     """Plot and save training vs validation loss curves."""
     print("Plotting training history...")
@@ -166,9 +165,6 @@ def plot_training_history(history):
     plt.savefig(save_path)
     plt.close()
     print(f"Training history saved to {save_path}")
-
-
-
 
 
 def train_model(model, train_loader, val_loader, criterion, optimizer):
