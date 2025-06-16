@@ -92,6 +92,7 @@ def apply_cuts_mask(df):
         & (df["cluster_SECOND_TIME"] > 0.0)
         & (df["cluster_SIGNIFICANCE"] > 0.0)
         & (df["jetRawE"] > 0.0)
+        & (df["jetRawPt"] > 0.0)
     )
 
 
