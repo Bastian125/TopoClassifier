@@ -17,6 +17,7 @@ from config import (
     columns,
     log_features,
     normal_features,
+    node_features,
     data_root_path as root_path,
     data_save_path as save_path,
 )
@@ -201,13 +202,17 @@ def normalize_data(train, val, test, tag):
     Also applies cube-root normalization to cluster_time.
     """
     stats_lines = [f"Normalization statistics for {tag}\n"]
+    epsilon = 1e-6
 
     # Apply log10 scaling ONLY for log_features
     for feature in log_features:
         for split in [train, val, test]:
-            split[feature] = np.log10(split[feature])
-            split[feature][~np.isfinite(split[feature])] = 0
-        stats_lines.append(f"{feature}: log10 scaled only (no standardization)\n")
+            x = split[feature]
+            x = np.where(x > 0, x, epsilon)  # Replace non-positive with epsilon
+            x = np.log10(x)
+            x[~np.isfinite(x)] = 0  # Replace any -inf/nan with 0
+            split[feature] = x
+        stats_lines.append(f"{feature}: log10 scaled (replaced <=0 with {epsilon})\n")
 
     # Apply standard scaling for normal_features
     for feature in normal_features:
