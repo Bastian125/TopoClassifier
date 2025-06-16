@@ -130,7 +130,6 @@ evironment_features = [
 
 node_features = [
     "clusterE",
-    "clusterPt",
     "cluster_FIRST_ENG_DENS",
     "cluster_EM_PROBABILITY",
     "cluster_CENTER_LAMBDA",
@@ -156,6 +155,7 @@ node_features = [
     "cluster_SIGNIFICANCE",
     "nPrimVtx",
     "avgMu",
+    "jetRawE",
     "diffEta",
     "zT",
     "zL",
