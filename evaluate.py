@@ -3,9 +3,11 @@ Plots probabilites that cluster belongs to a given class, ROC-curve, and precisi
 """
 
 # ---------- Imports ---------- #
+import numpy as np
 import matplotlib.pyplot as plt
 
 import torch
+from torch.utils.data import DataLoader
 from sklearn.metrics import (
     roc_curve,
     auc,
