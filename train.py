@@ -27,6 +27,7 @@ from tqdm import tqdm
 from config import data_save_path, output_path
 from io_utils import ensure_dir_exists
 from dataloader import HDF5Dataset
+from models import DNNModel
 
 # ---------- File Config ---------- #
 feature_keys = [
