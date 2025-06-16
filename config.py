@@ -38,6 +38,8 @@ columns = [
     "cluster_SIGNIFICANCE",
     "nPrimVtx",
     "avgMu",
+    "jetCnt",
+    "eventNumber",
     "jetRawEta",
     "jetRawPhi",
     "jetRawE",
@@ -123,6 +125,7 @@ jet_features = [
 evironment_features = [
     "nPrimVtx",
     "avgMu",
+    "jetCnt",
 ]
 
 node_features = [
