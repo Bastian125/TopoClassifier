@@ -5,6 +5,7 @@ Preprocesses withPU and noPU .root files to hdf5 files with cuts applied.
 import os
 import argparse
 import numpy as np
+import pandas as pd
 import h5py
 import uproot
 
@@ -293,45 +294,52 @@ def load_multiple_campaigns(campaigns, apply_norm):
     return {k: np.concatenate(v) for k, v in combined_data.items()}
 
 
-def build_graphs_from_h5(h5_path, feature_keys, group_size=10, k=8):
+def build_jetwise_graphs_with_edges(h5_path, feature_keys):
     """
-    Builds a list of PyG Data objects from normalized HDF5 cluster data.
+    Builds graphs that are ordered by eventNumber and jetCnt. The edges are just the node differences.
     """
-    print(f"Building graphs from {h5_path}...")
+    print(f"Building detailed graphs from {h5_path}...")
     with h5py.File(h5_path, "r") as f:
-        x = np.stack([f[key][:] for key in feature_keys], axis=1)
-        y = f["label"][:]
-
-    x = torch.tensor(x, dtype=torch.float32)
-    y = torch.tensor(y, dtype=torch.float32)
+        df = pd.DataFrame({k: f[k][:] for k in f.keys()})
 
     graphs = []
-    n_clusters = x.size(0)
-    num_groups = n_clusters // group_size
+    grouped = df.groupby(["eventNumber", "jetCnt"])
+    for (event, jet), group in grouped:
+        if len(group) < 2:
+            continue  # Skip jets with less than 2 clusters
 
-    for i in range(num_groups):
-        start, end = i * group_size, (i + 1) * group_size
-        x_evt = x[start:end]
-        y_evt = y[start:end]
-        if x_evt.size(0) < 2:
-            continue
-        edge_index = knn_graph(x_evt, k=min(k, x_evt.size(0) - 1))
-        edge_attr = (x_evt[edge_index[0]] - x_evt[edge_index[1]]).abs()
-        graphs.append(
-            Data(x=x_evt, edge_index=edge_index, edge_attr=edge_attr, y=y_evt)
-        )
+        x = torch.tensor(group[feature_keys].values, dtype=torch.float32)
+        y = torch.tensor(group["label"].values, dtype=torch.float32)
+
+        # Build edge_index with full combinations
+        edge_index = torch.combinations(torch.arange(x.size(0)), 2).t().contiguous()
+
+        # Edge features: absolute difference of features
+        edge_attr = torch.abs(x[edge_index[0]] - x[edge_index[1]])
+
+        # Create undirected edges (optional: duplicate reversed edges)
+        edge_index = torch.cat([edge_index, edge_index.flip(0)], dim=1)
+        edge_attr = torch.cat([edge_attr, edge_attr], dim=0)
+
+        data = Data(x=x, y=y, edge_index=edge_index, edge_attr=edge_attr)
+        data.eventNumber = torch.tensor(event)
+        data.jetCnt = torch.tensor(jet)
+        graphs.append(data)
 
     print(f"  -> Built {len(graphs)} graphs.")
     return graphs
 
 
-def build_and_save_graphs_from_h5(tag, feature_keys):
+def build_and_save_jetwise_graphs(tag, feature_keys):
+    """
+    Builds jetwise graphs with edges and stores them as pt files.
+    """
     for split in ["train", "val", "test"]:
         h5_path = os.path.join(save_path, f"{tag}_norm_{split}.h5")
         if not os.path.exists(h5_path):
             print(f"  [!] File not found: {h5_path}, skipping.")
             continue
-        graphs = build_graphs_from_h5(h5_path, feature_keys)
+        graphs = build_jetwise_graphs_with_edges(h5_path, feature_keys)
         out_path = os.path.join(save_path, f"{tag}_graphs_{split}.pt")
         torch.save(graphs, out_path)
         print(f"  -> Saved graphs to {out_path}")
@@ -341,6 +349,16 @@ def build_and_save_graphs_from_h5(tag, feature_keys):
 def main():
     if args.print_features:
         list_root_features(os.path.join(root_path, "mc20a_withPU.root"))
+        return
+
+    if args.build_graphs:
+        if args.campaign:
+            build_and_save_jetwise_graphs(args.campaign, node_features)
+        elif args.full:
+            for tag in ["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"]:
+                build_and_save_jetwise_graphs(tag, node_features)
+        else:
+            print("Error: --build_graphs requires --campaign or --full")
         return
 
     apply_norm = not args.no_normalisation
@@ -439,9 +457,6 @@ def main():
             save_split(train, tag, "norm_train")
             save_split(val, tag, "norm_val")
             save_split(test, tag, "norm_test")
-
-    if args.build_graphs:
-        build_and_save_graphs_from_h5(tag, normal_features)
 
 
 if __name__ == "__main__":
