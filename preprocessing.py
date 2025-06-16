@@ -9,6 +9,11 @@ import h5py
 import uproot
 
 from sklearn.model_selection import train_test_split
+import torch
+from torch_geometric.data import Data
+from torch_geometric.nn.pool import radius_graph
+from torch_geometric.data import InMemoryDataset
+from torch_geometric.loader import DataLoader as GeoLoader
 
 from config import (
     columns,
@@ -36,7 +41,7 @@ mode_group.add_argument(
     "--print_features", action="store_true", help="Print all features in the root file."
 )
 parser.add_argument(
-    "--no-normalisation",
+    "--no_normalisation",
     action="store_true",
     help="Skip normalisation and time transformation.",
 )
