@@ -11,9 +11,7 @@ import uproot
 from sklearn.model_selection import train_test_split
 import torch
 from torch_geometric.data import Data
-from torch_geometric.nn.pool import radius_graph
-from torch_geometric.data import InMemoryDataset
-from torch_geometric.loader import DataLoader as GeoLoader
+from torch_geometric.nn import knn_graph
 
 from config import (
     columns,
@@ -44,6 +42,11 @@ parser.add_argument(
     "--no_normalisation",
     action="store_true",
     help="Skip normalisation and time transformation.",
+)
+parser.add_argument(
+    "--build_graphs",
+    action="store_true",
+    help="Build and save PyG graphs from normalized HDF5 splits.",
 )
 args = parser.parse_args()
 
@@ -285,6 +288,50 @@ def load_multiple_campaigns(campaigns, apply_norm):
     return {k: np.concatenate(v) for k, v in combined_data.items()}
 
 
+def build_graphs_from_h5(h5_path, feature_keys, group_size=10, k=8):
+    """
+    Builds a list of PyG Data objects from normalized HDF5 cluster data.
+    """
+    print(f"Building graphs from {h5_path}...")
+    with h5py.File(h5_path, "r") as f:
+        x = np.stack([f[key][:] for key in feature_keys], axis=1)
+        y = f["label"][:]
+
+    x = torch.tensor(x, dtype=torch.float32)
+    y = torch.tensor(y, dtype=torch.float32)
+
+    graphs = []
+    n_clusters = x.size(0)
+    num_groups = n_clusters // group_size
+
+    for i in range(num_groups):
+        start, end = i * group_size, (i + 1) * group_size
+        x_evt = x[start:end]
+        y_evt = y[start:end]
+        if x_evt.size(0) < 2:
+            continue
+        edge_index = knn_graph(x_evt, k=min(k, x_evt.size(0) - 1))
+        edge_attr = (x_evt[edge_index[0]] - x_evt[edge_index[1]]).abs()
+        graphs.append(
+            Data(x=x_evt, edge_index=edge_index, edge_attr=edge_attr, y=y_evt)
+        )
+
+    print(f"  -> Built {len(graphs)} graphs.")
+    return graphs
+
+
+def build_and_save_graphs_from_h5(tag, feature_keys):
+    for split in ["train", "val", "test"]:
+        h5_path = os.path.join(save_path, f"{tag}_norm_{split}.h5")
+        if not os.path.exists(h5_path):
+            print(f"  [!] File not found: {h5_path}, skipping.")
+            continue
+        graphs = build_graphs_from_h5(h5_path, feature_keys)
+        out_path = os.path.join(save_path, f"{tag}_graphs_{split}.pt")
+        torch.save(graphs, out_path)
+        print(f"  -> Saved graphs to {out_path}")
+
+
 # ---------- Main ---------- #
 def main():
     if args.print_features:
@@ -387,6 +434,9 @@ def main():
             save_split(train, tag, "norm_train")
             save_split(val, tag, "norm_val")
             save_split(test, tag, "norm_test")
+
+    if args.build_graphs:
+        build_and_save_graphs_from_h5(tag, normal_features)
 
 
 if __name__ == "__main__":
