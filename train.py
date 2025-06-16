@@ -92,10 +92,11 @@ model_group.add_argument(
     help="DNN model that classifies hard-scatter and pile-up clusters.",
 )
 model_group.add_argument(
-    "--TunedDNN",
+    "--GATNet",
     action="store_true",
-    help="DNN model that classifies pile-up only and mixed clusters.",
+    help="Graph Attention Network (GATNet) for topo-cluster classification.",
 )
+
 
 args = parser.parse_args()
 
@@ -119,7 +120,11 @@ def campaign_to_dataset(campaign):
 
 
 train_dataset_str = campaign_to_dataset(args.train_campaign)
-model_str = "DNN"
+if args.DNN:
+    model_str = "DNN"
+elif args.GATNet:
+    model_str = "GATNet"
+
 
 # Set learning rate and batch size depending on Run2 or Run3
 if "Run2" in train_dataset_str:
