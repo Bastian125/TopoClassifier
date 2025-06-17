@@ -12,11 +12,12 @@ import gc
 import time
 from datetime import datetime, timedelta
 import psutil
+import tempfile
+import shutil
 
 from sklearn.model_selection import train_test_split
 import torch
 from torch_geometric.data import Data
-from torch_geometric.nn import knn_graph
 
 from config import (
     columns,
@@ -299,115 +300,95 @@ def load_multiple_campaigns(campaigns, apply_norm):
 
 
 def get_memory_usage():
+    """Returns current RAM and VRAM usage in GB."""
     process = psutil.Process(os.getpid())
-    ram_bytes = process.memory_info().rss
-    ram_gb = ram_bytes / 1e9
-    vram_gb = torch.cuda.memory_allocated() / 1e9 if torch.cuda.is_available() else 0
+    ram_gb = process.memory_info().rss / 1e9
+    vram_gb = torch.cuda.memory_allocated() / 1e9 if torch.cuda.is_available() else 0.0
     return ram_gb, vram_gb
 
 
-def build_jetwise_graphs_with_edges(h5_path, feature_keys, max_batch_graphs=100000):
-    """
-    Builds jet-wise PyG graphs in batches using NumPy (no pandas),
-    with RAM, VRAM and time monitoring.
-    """
-    print(
-        f"[{datetime.now()}] Building graphs from {h5_path} with RAM/VRAM/time monitoring..."
-    )
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    start_time = time.time()
-
+def build_graphs_h5_pandas_batched(
+    h5_path, feature_keys, output_path, batch_size=10000
+):
+    print(f"[{datetime.now()}] Loading HDF5 into pandas DataFrame from {h5_path}...")
     with h5py.File(h5_path, "r") as f:
         data = {k: f[k][:] for k in f.keys()}
+    df = pd.DataFrame(data)
+    print(f"[✓] Loaded {len(df)} entries")
+    total_jets = df.groupby(["eventNumber", "jetCnt"]).ngroups
+    print(f"[INFO] Total jets to process: {total_jets}")
 
-    event_numbers = data["eventNumber"]
-    jet_counts = data["jetCnt"]
-    unique_keys, inverse = np.unique(
-        np.stack((event_numbers, jet_counts), axis=1), axis=0, return_inverse=True
-    )
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    total_jets = len(unique_keys)
-    all_batches = []
-    current_batch = []
+    grouped = df.groupby(["eventNumber", "jetCnt"])
+    graph_list = []
+    temp_batch = []
 
-    for jet_id in range(total_jets):
-        indices = np.where(inverse == jet_id)[0]
-        if len(indices) < 2:
+    for idx, ((event, jet), group) in enumerate(grouped):
+        if len(group) < 2:
             continue
 
-        x_np = np.stack([data[feat][indices] for feat in feature_keys], axis=1).astype(
-            np.float32
-        )
-        x = torch.from_numpy(x_np).to(device)
-        y = torch.from_numpy(data["label"][indices]).to(
-            dtype=torch.float32, device=device
-        )
+        x_np = group[feature_keys].to_numpy(dtype=np.float32)
+        x = torch.tensor(x_np, dtype=torch.float32, device=device)
+        y = torch.tensor(group["label"].values, dtype=torch.float32, device=device)
 
         num_nodes = x.size(0)
-        edge_index = (
-            torch.combinations(torch.arange(num_nodes, device=device), r=2)
-            .t()
-            .contiguous()
-        )
-        edge_attr = torch.cdist(x, x, p=1)[edge_index[0], edge_index[1]].unsqueeze(1)
-
+        edge_index = torch.combinations(torch.arange(num_nodes, device=device), r=2).t()
         edge_index = torch.cat([edge_index, edge_index.flip(0)], dim=1)
-        edge_attr = torch.cat([edge_attr, edge_attr], dim=0)
+
+        edge_attr = torch.cdist(x, x, p=1)[edge_index[0], edge_index[1]].unsqueeze(1)
 
         num_signal = (y == 1).sum().item()
         num_pu = (y == 0).sum().item()
         pu_weight = num_signal / num_pu if num_signal > 0 and num_pu > 0 else 1.0
-        weights = torch.where(
-            y == 0,
-            torch.tensor(pu_weight, device=device),
-            torch.tensor(1.0, device=device),
-        )
-
-        event = event_numbers[indices[0]]
-        jet = jet_counts[indices[0]]
+        weights = torch.where(y == 0, pu_weight, 1.0)
 
         graph = Data(
-            x=x, y=y, edge_index=edge_index, edge_attr=edge_attr, weights=weights
+            x=x,
+            y=y,
+            edge_index=edge_index,
+            edge_attr=edge_attr,
+            weights=weights,
+            eventNumber=torch.tensor([event]),
+            jetCnt=torch.tensor([jet]),
         )
-        graph.eventNumber = torch.tensor(event, device=device)
-        graph.jetCnt = torch.tensor(jet, device=device)
+        temp_batch.append(graph)
 
-        current_batch.append(graph)
-
-        if len(current_batch) >= max_batch_graphs:
-            all_batches.append(current_batch)
-            current_batch = []
-            torch.cuda.empty_cache()
-            gc.collect()
-
-        if jet_id % 10000 == 0:
-            elapsed = time.time() - start_time
+        if len(temp_batch) >= batch_size:
             ram, vram = get_memory_usage()
             print(
-                f"[✓] Processed jets {jet_id}/{total_jets} | RAM: {ram:.2f} GB | VRAM: {vram:.2f} GB | Time: {str(timedelta(seconds=int(elapsed)))}"
+                f"[✓] Processed {idx + 1}/{total_jets} jets | RAM: {ram:.2f} GB | VRAM: {vram:.2f} GB | Flushing {len(temp_batch)} graphs to disk"
             )
+            graph_list.extend([g.cpu() for g in temp_batch])
+            temp_batch = []
 
-    if current_batch:
-        all_batches.append(current_batch)
-
-    print(f"[✓] Finished building {total_jets} jets in {len(all_batches)} batches")
-    return all_batches
+    # Final flush
+    graph_list.extend([g.cpu() for g in temp_batch])
+    print(f"[{datetime.now()}] Saving {len(graph_list)} graphs to {output_path}...")
+    torch.save(graph_list, output_path)
+    print(f"[✓] Done. Saved {len(graph_list)} graphs to {output_path}")
 
 
 def build_and_save_jetwise_graphs(tag, feature_keys):
-    """
-    Builds jetwise graphs with edges and stores them as pt files.
-    """
     for split in ["train", "val", "test"]:
         h5_path = os.path.join(save_path, f"{tag}_norm_{split}.h5")
+        output_path = os.path.join(save_path, f"{tag}_graphs_{split}.pt")
+
+        print(f"\n[INFO] Processing split: {split.upper()}")
         if not os.path.exists(h5_path):
             print(f"  [!] File not found: {h5_path}, skipping.")
             continue
-        graphs = build_jetwise_graphs_with_edges(h5_path, feature_keys)
-        out_path = os.path.join(save_path, f"{tag}_graphs_{split}.pt")
-        torch.save(graphs, out_path)
-        print(f"  -> Saved graphs to {out_path}")
+
+        ram_before, vram_before = get_memory_usage()
+        print(
+            f"  - RAM before: {ram_before:.2f} GB | VRAM before: {vram_before:.2f} GB"
+        )
+
+        build_graphs_h5_pandas_batched(h5_path, feature_keys, output_path)
+
+        ram_after, vram_after = get_memory_usage()
+        print(f"  - RAM after: {ram_after:.2f} GB | VRAM after: {vram_after:.2f} GB")
+        print(f"  [✓] Saved graphs to: {output_path}")
 
 
 # ---------- Main ---------- #
