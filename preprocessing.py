@@ -8,6 +8,10 @@ import numpy as np
 import pandas as pd
 import h5py
 import uproot
+import gc
+import time
+from datetime import datetime, timedelta
+import psutil
 
 from sklearn.model_selection import train_test_split
 import torch
@@ -294,40 +298,101 @@ def load_multiple_campaigns(campaigns, apply_norm):
     return {k: np.concatenate(v) for k, v in combined_data.items()}
 
 
-def build_jetwise_graphs_with_edges(h5_path, feature_keys):
+def get_memory_usage():
+    process = psutil.Process(os.getpid())
+    ram_bytes = process.memory_info().rss
+    ram_gb = ram_bytes / 1e9
+    vram_gb = torch.cuda.memory_allocated() / 1e9 if torch.cuda.is_available() else 0
+    return ram_gb, vram_gb
+
+
+def build_jetwise_graphs_with_edges(h5_path, feature_keys, max_batch_graphs=100000):
     """
-    Builds graphs that are ordered by eventNumber and jetCnt. The edges are just the node differences.
+    Builds jet-wise PyG graphs in batches using NumPy (no pandas),
+    with RAM, VRAM and time monitoring.
     """
-    print(f"Building detailed graphs from {h5_path}...")
+    print(
+        f"[{datetime.now()}] Building graphs from {h5_path} with RAM/VRAM/time monitoring..."
+    )
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    start_time = time.time()
+
     with h5py.File(h5_path, "r") as f:
-        df = pd.DataFrame({k: f[k][:] for k in f.keys()})
+        data = {k: f[k][:] for k in f.keys()}
 
-    graphs = []
-    grouped = df.groupby(["eventNumber", "jetCnt"])
-    for (event, jet), group in grouped:
-        if len(group) < 2:
-            continue  # Skip jets with less than 2 clusters
+    event_numbers = data["eventNumber"]
+    jet_counts = data["jetCnt"]
+    unique_keys, inverse = np.unique(
+        np.stack((event_numbers, jet_counts), axis=1), axis=0, return_inverse=True
+    )
 
-        x = torch.tensor(group[feature_keys].values, dtype=torch.float32)
-        y = torch.tensor(group["label"].values, dtype=torch.float32)
+    total_jets = len(unique_keys)
+    all_batches = []
+    current_batch = []
 
-        # Build edge_index with full combinations
-        edge_index = torch.combinations(torch.arange(x.size(0)), 2).t().contiguous()
+    for jet_id in range(total_jets):
+        indices = np.where(inverse == jet_id)[0]
+        if len(indices) < 2:
+            continue
 
-        # Edge features: absolute difference of features
-        edge_attr = torch.abs(x[edge_index[0]] - x[edge_index[1]])
+        x_np = np.stack([data[feat][indices] for feat in feature_keys], axis=1).astype(
+            np.float32
+        )
+        x = torch.from_numpy(x_np).to(device)
+        y = torch.from_numpy(data["label"][indices]).to(
+            dtype=torch.float32, device=device
+        )
 
-        # Create undirected edges (optional: duplicate reversed edges)
+        num_nodes = x.size(0)
+        edge_index = (
+            torch.combinations(torch.arange(num_nodes, device=device), r=2)
+            .t()
+            .contiguous()
+        )
+        edge_attr = torch.cdist(x, x, p=1)[edge_index[0], edge_index[1]].unsqueeze(1)
+
         edge_index = torch.cat([edge_index, edge_index.flip(0)], dim=1)
         edge_attr = torch.cat([edge_attr, edge_attr], dim=0)
 
-        data = Data(x=x, y=y, edge_index=edge_index, edge_attr=edge_attr)
-        data.eventNumber = torch.tensor(event)
-        data.jetCnt = torch.tensor(jet)
-        graphs.append(data)
+        num_signal = (y == 1).sum().item()
+        num_pu = (y == 0).sum().item()
+        pu_weight = num_signal / num_pu if num_signal > 0 and num_pu > 0 else 1.0
+        weights = torch.where(
+            y == 0,
+            torch.tensor(pu_weight, device=device),
+            torch.tensor(1.0, device=device),
+        )
 
-    print(f"  -> Built {len(graphs)} graphs.")
-    return graphs
+        event = event_numbers[indices[0]]
+        jet = jet_counts[indices[0]]
+
+        graph = Data(
+            x=x, y=y, edge_index=edge_index, edge_attr=edge_attr, weights=weights
+        )
+        graph.eventNumber = torch.tensor(event, device=device)
+        graph.jetCnt = torch.tensor(jet, device=device)
+
+        current_batch.append(graph)
+
+        if len(current_batch) >= max_batch_graphs:
+            all_batches.append(current_batch)
+            current_batch = []
+            torch.cuda.empty_cache()
+            gc.collect()
+
+        if jet_id % 10000 == 0:
+            elapsed = time.time() - start_time
+            ram, vram = get_memory_usage()
+            print(
+                f"[✓] Processed jets {jet_id}/{total_jets} | RAM: {ram:.2f} GB | VRAM: {vram:.2f} GB | Time: {str(timedelta(seconds=int(elapsed)))}"
+            )
+
+    if current_batch:
+        all_batches.append(current_batch)
+
+    print(f"[✓] Finished building {total_jets} jets in {len(all_batches)} batches")
+    return all_batches
 
 
 def build_and_save_jetwise_graphs(tag, feature_keys):
