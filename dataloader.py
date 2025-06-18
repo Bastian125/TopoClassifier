@@ -1,9 +1,11 @@
 import h5py
 import numpy as np
+import glob
+import os
 
 import torch
-import tqdm
-from torch.utils.data import Dataset
+from torch.utils.data import IterableDataset
+from torch_geometric.data import Data
 
 
 class HDF5Dataset(Dataset):
@@ -43,3 +45,23 @@ class HDF5Dataset(Dataset):
         Useful for analysis like permutation importance.
         """
         return self.data.numpy(), self.labels.numpy()
+
+
+class GraphBatchIterableDataset(IterableDataset):
+    def __init__(self, pt_file_pattern):
+        """
+        Args:
+            pt_file_pattern (str): Glob pattern like '/path/to/mc20e_graphs_train_batch_*.pt'
+        """
+        self.pt_file_pattern = pt_file_pattern
+        self.files = sorted(glob.glob(pt_file_pattern))
+        if not self.files:
+            raise FileNotFoundError(
+                f"No .pt files found matching pattern: {pt_file_pattern}"
+            )
+
+    def __iter__(self):
+        for pt_file in self.files:
+            graphs = torch.load(pt_file)
+            for graph in graphs:
+                yield graph
