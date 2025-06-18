@@ -308,65 +308,135 @@ def get_memory_usage():
 
 
 def build_graphs_h5_pandas_batched(
-    h5_path, feature_keys, output_path, batch_size=10000
+    h5_path, feature_keys, output_path, batch_size=2000000
 ):
     print(f"[{datetime.now()}] Loading HDF5 into pandas DataFrame from {h5_path}...")
     with h5py.File(h5_path, "r") as f:
         data = {k: f[k][:] for k in f.keys()}
     df = pd.DataFrame(data)
     print(f"[✓] Loaded {len(df)} entries")
-    total_jets = df.groupby(["eventNumber", "jetCnt"]).ngroups
-    print(f"[INFO] Total jets to process: {total_jets}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     grouped = df.groupby(["eventNumber", "jetCnt"])
-    graph_list = []
-    temp_batch = []
+    total_jets = len(grouped)
+    print(f"[INFO] Total jets to process: {total_jets}")
+
+    batch_events = []
+    batch_jets = []
+    batch_x_list = []
+    batch_y_list = []
+    batch_indices = []
+    node_offset = 0
+
+    batch_counter = 0
 
     for idx, ((event, jet), group) in enumerate(grouped):
         if len(group) < 2:
             continue
 
         x_np = group[feature_keys].to_numpy(dtype=np.float32)
-        x = torch.tensor(x_np, dtype=torch.float32, device=device)
-        y = torch.tensor(group["label"].values, dtype=torch.float32, device=device)
+        y_np = group["label"].to_numpy(dtype=np.float32)
 
-        num_nodes = x.size(0)
-        edge_index = torch.combinations(torch.arange(num_nodes, device=device), r=2).t()
+        x_tensor = torch.tensor(x_np, device=device)
+        y_tensor = torch.tensor(y_np, device=device)
+
+        batch_x_list.append(x_tensor)
+        batch_y_list.append(y_tensor)
+        batch_events.append(event)
+        batch_jets.append(jet)
+
+        node_indices = torch.arange(len(x_np), device=device) + node_offset
+        edge_index = torch.combinations(node_indices, r=2).t()
         edge_index = torch.cat([edge_index, edge_index.flip(0)], dim=1)
+        batch_indices.append(edge_index)
 
-        edge_attr = torch.cdist(x, x, p=1)[edge_index[0], edge_index[1]].unsqueeze(1)
+        node_offset += len(x_np)
 
-        num_signal = (y == 1).sum().item()
-        num_pu = (y == 0).sum().item()
-        pu_weight = num_signal / num_pu if num_signal > 0 and num_pu > 0 else 1.0
-        weights = torch.where(y == 0, pu_weight, 1.0)
+        if len(batch_x_list) >= batch_size:
+            graph_list = []
+            start_node = 0
+            for i in range(len(batch_x_list)):
+                x = batch_x_list[i]
+                y = batch_y_list[i]
+                num_nodes = x.size(0)
+                edge_index = batch_indices[i] - start_node
+                edge_attr = torch.cdist(x, x, p=1)[
+                    edge_index[0], edge_index[1]
+                ].unsqueeze(1)
 
-        graph = Data(
-            x=x,
-            y=y,
-            edge_index=edge_index,
-            edge_attr=edge_attr,
-            weights=weights,
-            eventNumber=torch.tensor([event]),
-            jetCnt=torch.tensor([jet]),
-        )
-        temp_batch.append(graph)
+                num_signal = (y == 1).sum().item()
+                num_pu = (y == 0).sum().item()
+                pu_weight = (
+                    num_signal / num_pu if num_signal > 0 and num_pu > 0 else 1.0
+                )
+                weights = torch.where(y == 0, pu_weight, 1.0)
 
-        if len(temp_batch) >= batch_size:
+                graph = Data(
+                    x=x,
+                    y=y,
+                    edge_index=edge_index,
+                    edge_attr=edge_attr,
+                    weights=weights,
+                    eventNumber=torch.tensor([batch_events[i]], device=device),
+                    jetCnt=torch.tensor([batch_jets[i]], device=device),
+                )
+                graph_list.append(graph)
+                start_node += num_nodes
+
             ram, vram = get_memory_usage()
             print(
-                f"[✓] Processed {idx + 1}/{total_jets} jets | RAM: {ram:.2f} GB | VRAM: {vram:.2f} GB | Flushing {len(temp_batch)} graphs to disk"
+                f"[✓] Processed {idx + 1}/{total_jets} jets | RAM: {ram:.2f} GB | VRAM: {vram:.2f} GB | Saving batch {batch_counter}"
             )
-            graph_list.extend([g.cpu() for g in temp_batch])
-            temp_batch = []
+
+            batch_output_path = output_path.replace(".pt", f"_batch{batch_counter}.pt")
+            torch.save(graph_list, batch_output_path)
+            batch_counter += 1
+
+            batch_x_list.clear()
+            batch_y_list.clear()
+            batch_indices.clear()
+            batch_events.clear()
+            batch_jets.clear()
+            node_offset = 0
 
     # Final flush
-    graph_list.extend([g.cpu() for g in temp_batch])
-    print(f"[{datetime.now()}] Saving {len(graph_list)} graphs to {output_path}...")
-    torch.save(graph_list, output_path)
-    print(f"[✓] Done. Saved {len(graph_list)} graphs to {output_path}")
+    if batch_x_list:
+        graph_list = []
+        start_node = 0
+        for i in range(len(batch_x_list)):
+            x = batch_x_list[i]
+            y = batch_y_list[i]
+            num_nodes = x.size(0)
+            edge_index = batch_indices[i] - start_node
+            edge_attr = torch.cdist(x, x, p=1)[edge_index[0], edge_index[1]].unsqueeze(
+                1
+            )
+
+            num_signal = (y == 1).sum().item()
+            num_pu = (y == 0).sum().item()
+            pu_weight = num_signal / num_pu if num_signal > 0 and num_pu > 0 else 1.0
+            weights = torch.where(y == 0, pu_weight, 1.0)
+
+            graph = Data(
+                x=x,
+                y=y,
+                edge_index=edge_index,
+                edge_attr=edge_attr,
+                weights=weights,
+                eventNumber=torch.tensor([batch_events[i]], device=device),
+                jetCnt=torch.tensor([batch_jets[i]], device=device),
+            )
+            graph_list.append(graph)
+            start_node += num_nodes
+
+        batch_output_path = output_path.replace(".pt", f"_batch{batch_counter}.pt")
+        torch.save(graph_list, batch_output_path)
+        print(
+            f"[{datetime.now()}] Saved final batch {batch_counter} to {batch_output_path}"
+        )
+
+    print(f"[{datetime.now()}] All batches saved for {output_path}")
 
 
 def build_and_save_jetwise_graphs(tag, feature_keys):
