@@ -2,7 +2,8 @@
 import h5py
 import numpy as np
 import glob
-import os
+import re
+import time
 
 import torch
 from torch.utils.data import Dataset, IterableDataset
@@ -48,21 +49,38 @@ class HDF5Dataset(Dataset):
         return self.data.numpy(), self.labels.numpy()
 
 
-class GraphBatchIterableDataset(IterableDataset):
-    def __init__(self, pt_file_pattern):
-        """
-        Args:
-            pt_file_pattern (str): Glob pattern like '/path/to/mc20e_graphs_train_batch_*.pt'
-        """
-        self.pt_file_pattern = pt_file_pattern
-        self.files = sorted(glob.glob(pt_file_pattern))
-        if not self.files:
-            raise FileNotFoundError(
-                f"No .pt files found matching pattern: {pt_file_pattern}"
-            )
+class LazyGraphDataset(Dataset):
+    def __init__(self, file_pattern):
+        self.chunk_paths = sorted(glob.glob(file_pattern), key=natural_sort_key)
+        self.index_map = []
 
-    def __iter__(self):
-        for pt_file in self.files:
-            graphs = torch.load(pt_file)
-            for graph in graphs:
-                yield graph
+        # Build index map: (chunk_idx, graph_idx_within_chunk)
+
+        for chunk_idx, path in enumerate(self.chunk_paths):
+            print(f"[INFO] Loading chunk metadata from: {path}")
+            start = time.time()
+            graphs = torch.load(path, map_location="cpu")
+            print(
+                f"[✓] Loaded {len(graphs)} graphs from chunk {chunk_idx} in {time.time() - start:.2f} sec"
+            )
+            for i in range(len(graphs)):
+                self.index_map.append((chunk_idx, i))
+                self._cache = {}  # Optional: one-chunk-at-a-time caching
+
+    def __len__(self):
+        return len(self.index_map)
+
+    def __getitem__(self, idx):
+        chunk_idx, graph_idx = self.index_map[idx]
+
+        if chunk_idx not in self._cache:
+            self._cache = {}  # clear previous cache
+            path = self.chunk_paths[chunk_idx]
+            self._cache[chunk_idx] = torch.load(path, map_location="cpu")
+
+        return self._cache[chunk_idx][graph_idx]
+
+    def natural_sort_key(path):
+        return [
+            int(text) if text.isdigit() else text for text in re.split(r"(\d+)", path)
+        ]
