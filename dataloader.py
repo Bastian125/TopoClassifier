@@ -10,6 +10,10 @@ from torch.utils.data import Dataset, IterableDataset
 from torch_geometric.data import Data
 
 
+def natural_sort_key(path):
+    return [int(text) if text.isdigit() else text for text in re.split(r"(\d+)", path)]
+
+
 class HDF5Dataset(Dataset):
     """
     PyTorch dataset for loading normalized ATLAS features from an HDF5 file.
@@ -79,8 +83,3 @@ class LazyGraphDataset(Dataset):
             self._cache[chunk_idx] = torch.load(path, map_location="cpu")
 
         return self._cache[chunk_idx][graph_idx]
-
-    def natural_sort_key(path):
-        return [
-            int(text) if text.isdigit() else text for text in re.split(r"(\d+)", path)
-        ]
