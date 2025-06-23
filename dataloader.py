@@ -1,10 +1,11 @@
+# ---------- Imports ---------- #
 import h5py
 import numpy as np
 import glob
 import os
 
 import torch
-from torch.utils.data import IterableDataset
+from torch.utils.data import Dataset, IterableDataset
 from torch_geometric.data import Data
 
 
