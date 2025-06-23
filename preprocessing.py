@@ -2,18 +2,17 @@
 Preprocesses withPU and noPU .root files to hdf5 files with cuts applied.
 """
 
+# ---------- Imports ---------- #
 import os
 import argparse
 import numpy as np
 import pandas as pd
 import h5py
 import uproot
-import gc
-import time
-from datetime import datetime, timedelta
+from datetime import datetime
+from tqdm import tqdm
 import psutil
-import tempfile
-import shutil
+import glob
 
 from sklearn.model_selection import train_test_split
 import torch
@@ -299,144 +298,100 @@ def load_multiple_campaigns(campaigns, apply_norm):
     return {k: np.concatenate(v) for k, v in combined_data.items()}
 
 
-def get_memory_usage():
-    """Returns current RAM and VRAM usage in GB."""
-    process = psutil.Process(os.getpid())
-    ram_gb = process.memory_info().rss / 1e9
-    vram_gb = torch.cuda.memory_allocated() / 1e9 if torch.cuda.is_available() else 0.0
-    return ram_gb, vram_gb
+def print_memory():
+    """
+    Prints current memory usage in GB.
+    """
+    ram = psutil.Process().memory_info().rss / 1e9
+    print(f"[RAM] Current usage: {ram:.2f} GB")
 
 
-def build_graphs_h5_pandas_batched(
-    h5_path, feature_keys, output_path, batch_size=2000000
+def build_graphs(
+    h5_path, feature_keys, output_path, chunk_size=100000, merge_chunks=False
 ):
+    """
+    Builds and saves PyTorch Geometric graphs from HDF5 into chunked .pt files.
+    Then optionally merges them into a final single .pt file.
+    """
     print(f"[{datetime.now()}] Loading HDF5 into pandas DataFrame from {h5_path}...")
     with h5py.File(h5_path, "r") as f:
         data = {k: f[k][:] for k in f.keys()}
     df = pd.DataFrame(data)
     print(f"[✓] Loaded {len(df)} entries")
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     grouped = df.groupby(["eventNumber", "jetCnt"])
     total_jets = len(grouped)
     print(f"[INFO] Total jets to process: {total_jets}")
 
-    batch_events = []
-    batch_jets = []
-    batch_x_list = []
-    batch_y_list = []
-    batch_indices = []
-    node_offset = 0
+    graph_list = []
+    chunk_idx = 0
 
-    batch_counter = 0
-
-    for idx, ((event, jet), group) in enumerate(grouped):
+    for idx, ((event, jet), group) in enumerate(
+        tqdm(grouped, desc="Building graphs", unit="jet")
+    ):
         if len(group) < 2:
             continue
 
         x_np = group[feature_keys].to_numpy(dtype=np.float32)
         y_np = group["label"].to_numpy(dtype=np.float32)
 
-        x_tensor = torch.tensor(x_np, device=device)
-        y_tensor = torch.tensor(y_np, device=device)
+        if x_np.shape[0] != y_np.shape[0] or x_np.ndim != 2:
+            continue
 
-        batch_x_list.append(x_tensor)
-        batch_y_list.append(y_tensor)
-        batch_events.append(event)
-        batch_jets.append(jet)
+        x = torch.tensor(x_np, dtype=torch.float32)
+        y = torch.tensor(y_np, dtype=torch.float32)
 
-        node_indices = torch.arange(len(x_np), device=device) + node_offset
+        num_nodes = x.size(0)
+        node_indices = torch.arange(num_nodes)
         edge_index = torch.combinations(node_indices, r=2).t()
         edge_index = torch.cat([edge_index, edge_index.flip(0)], dim=1)
-        batch_indices.append(edge_index)
 
-        node_offset += len(x_np)
+        num_signal = (y == 1).sum().item()
+        num_pu = (y == 0).sum().item()
+        pu_weight = num_signal / num_pu if num_signal > 0 and num_pu > 0 else 1.0
+        weights = torch.where(y == 0, pu_weight, 1.0)
 
-        if len(batch_x_list) >= batch_size:
-            graph_list = []
-            start_node = 0
-            for i in range(len(batch_x_list)):
-                x = batch_x_list[i]
-                y = batch_y_list[i]
-                num_nodes = x.size(0)
-                edge_index = batch_indices[i] - start_node
-                edge_attr = torch.cdist(x, x, p=1)[
-                    edge_index[0], edge_index[1]
-                ].unsqueeze(1)
-
-                num_signal = (y == 1).sum().item()
-                num_pu = (y == 0).sum().item()
-                pu_weight = (
-                    num_signal / num_pu if num_signal > 0 and num_pu > 0 else 1.0
-                )
-                weights = torch.where(y == 0, pu_weight, 1.0)
-
-                graph = Data(
-                    x=x,
-                    y=y,
-                    edge_index=edge_index,
-                    edge_attr=edge_attr,
-                    weights=weights,
-                    eventNumber=torch.tensor([batch_events[i]], device=device),
-                    jetCnt=torch.tensor([batch_jets[i]], device=device),
-                )
-                graph_list.append(graph)
-                start_node += num_nodes
-
-            ram, vram = get_memory_usage()
-            print(
-                f"[✓] Processed {idx + 1}/{total_jets} jets | RAM: {ram:.2f} GB | VRAM: {vram:.2f} GB | Saving batch {batch_counter}"
-            )
-
-            batch_output_path = output_path.replace(".pt", f"_batch{batch_counter}.pt")
-            torch.save(graph_list, batch_output_path)
-            batch_counter += 1
-
-            batch_x_list.clear()
-            batch_y_list.clear()
-            batch_indices.clear()
-            batch_events.clear()
-            batch_jets.clear()
-            node_offset = 0
-
-    # Final flush
-    if batch_x_list:
-        graph_list = []
-        start_node = 0
-        for i in range(len(batch_x_list)):
-            x = batch_x_list[i]
-            y = batch_y_list[i]
-            num_nodes = x.size(0)
-            edge_index = batch_indices[i] - start_node
-            edge_attr = torch.cdist(x, x, p=1)[edge_index[0], edge_index[1]].unsqueeze(
-                1
-            )
-
-            num_signal = (y == 1).sum().item()
-            num_pu = (y == 0).sum().item()
-            pu_weight = num_signal / num_pu if num_signal > 0 and num_pu > 0 else 1.0
-            weights = torch.where(y == 0, pu_weight, 1.0)
-
-            graph = Data(
-                x=x,
-                y=y,
-                edge_index=edge_index,
-                edge_attr=edge_attr,
-                weights=weights,
-                eventNumber=torch.tensor([batch_events[i]], device=device),
-                jetCnt=torch.tensor([batch_jets[i]], device=device),
-            )
-            graph_list.append(graph)
-            start_node += num_nodes
-
-        batch_output_path = output_path.replace(".pt", f"_batch{batch_counter}.pt")
-        torch.save(graph_list, batch_output_path)
-        print(
-            f"[{datetime.now()}] Saved final batch {batch_counter} to {batch_output_path}"
+        graph = Data(
+            x=x,
+            y=y,
+            edge_index=edge_index,
+            weights=weights,
+            eventNumber=torch.full((num_nodes,), event, dtype=torch.int32),
+            jetCnt=torch.full((num_nodes,), jet, dtype=torch.int32),
         )
 
-    print(f"[{datetime.now()}] All batches saved for {output_path}")
+        graph_list.append(graph)
+
+        if len(graph_list) >= chunk_size:
+            chunk_path = output_path.replace(".pt", f"_chunk{chunk_idx}.pt")
+            torch.save(graph_list, chunk_path)
+            print(
+                f"[{datetime.now()}] Saved chunk {chunk_idx} with {len(graph_list)} graphs → {chunk_path}"
+            )
+            print_memory()
+            graph_list.clear()
+            chunk_idx += 1
+
+    if graph_list:
+        chunk_path = output_path.replace(".pt", f"_chunk{chunk_idx}.pt")
+        torch.save(graph_list, chunk_path)
+        print(
+            f"[{datetime.now()}] Saved final chunk {chunk_idx} with {len(graph_list)} graphs → {chunk_path}"
+        )
+        print_memory()
+
+    print(f"[✓] All chunks saved.")
+
+    # Optional merge
+    if merge_chunks:
+        print(f"[INFO] Merging all chunks into single file...")
+        chunk_files = sorted(glob.glob(output_path.replace(".pt", "_chunk*.pt")))
+        merged_graphs = []
+        for file in tqdm(chunk_files, desc="Merging chunks", unit="file"):
+            merged_graphs.extend(torch.load(file))
+
+        torch.save(merged_graphs, output_path)
+        print(f"[✓] Merged {len(merged_graphs)} graphs to: {output_path}")
 
 
 def build_and_save_jetwise_graphs(tag, feature_keys):
@@ -449,15 +404,12 @@ def build_and_save_jetwise_graphs(tag, feature_keys):
             print(f"  [!] File not found: {h5_path}, skipping.")
             continue
 
-        ram_before, vram_before = get_memory_usage()
-        print(
-            f"  - RAM before: {ram_before:.2f} GB | VRAM before: {vram_before:.2f} GB"
-        )
+        print_memory()
 
-        build_graphs_h5_pandas_batched(h5_path, feature_keys, output_path)
+        build_graphs(h5_path, feature_keys, output_path, chunk_size=100000)
 
-        ram_after, vram_after = get_memory_usage()
-        print(f"  - RAM after: {ram_after:.2f} GB | VRAM after: {vram_after:.2f} GB")
+        print_memory()
+
         print(f"  [✓] Saved graphs to: {output_path}")
 
 
