@@ -42,7 +42,7 @@ class DNNModel(nn.Module):
             nn.BatchNorm1d(16),
             nn.Linear(16, 8),
             nn.ReLU(),
-            nn.BatchNorm1d(8)
+            nn.BatchNorm1d(8),
             nn.Linear(8, 1),
         )
 
