@@ -296,7 +296,6 @@ def plot_permutation_importance(
     plt.figure(figsize=(10, 6))
     plt.barh(sorted_features, sorted_importances)
     plt.xlabel("Drop in AUC")
-    plt.title("Permutation Feature Importance")
     plt.gca().invert_yaxis()
     plt.tight_layout()
 
