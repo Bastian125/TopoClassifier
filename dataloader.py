@@ -4,6 +4,7 @@ import numpy as np
 import glob
 import re
 import time
+import random
 
 import torch
 from torch.utils.data import Dataset, IterableDataset
@@ -54,23 +55,27 @@ class HDF5Dataset(Dataset):
 
 
 class LazyGraphDataset(Dataset):
-    def __init__(self, file_pattern, chunk_size=100_000):
+    def __init__(self, file_pattern, chunk_size=100_000, shuffle_chunks=True):
         self.chunk_paths = sorted(glob.glob(file_pattern), key=natural_sort_key)
         self.index_map = []
         self._cache = {}
 
-        for chunk_idx, path in enumerate(self.chunk_paths):
-            print(f"[INFO] Loading chunk metadata from: {path}")
+        chunk_order = list(range(len(self.chunk_paths)))
+        if shuffle_chunks:
+            random.shuffle(chunk_order)
+
+        for chunk_idx in chunk_order:
+            path = self.chunk_paths[chunk_idx]
+            print(f"[INFO] Reading metadata for chunk: {path}")
             start = time.time()
 
             if chunk_idx < len(self.chunk_paths) - 1:
                 num_graphs = chunk_size
             else:
-                # Only load the last chunk to get its actual size
                 graphs = torch.load(path, map_location="cpu")
                 num_graphs = len(graphs)
                 print(
-                    f"[✓] Loaded {num_graphs} graphs from last chunk in {time.time() - start:.2f} sec"
+                    f"[✓] Loaded last chunk: {num_graphs} graphs in {time.time() - start:.2f} sec"
                 )
 
             for i in range(num_graphs):
@@ -81,12 +86,10 @@ class LazyGraphDataset(Dataset):
 
     def __getitem__(self, idx):
         chunk_idx, graph_idx = self.index_map[idx]
-        print(f"[DEBUG] Accessing graph {graph_idx} from chunk {chunk_idx}")
 
         if chunk_idx not in self._cache:
-            self._cache = {}  # clear cache
+            self._cache = {}  # clear previous chunk
             path = self.chunk_paths[chunk_idx]
-            print(f"[DEBUG] Loading chunk {chunk_idx} from {path}")
             self._cache[chunk_idx] = torch.load(path, map_location="cpu")
 
         return self._cache[chunk_idx][graph_idx]

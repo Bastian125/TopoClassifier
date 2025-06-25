@@ -323,12 +323,20 @@ def main():
             val_dataset = LazyGraphDataset(val_pattern)
 
             train_loader = GeoDataLoader(
-                train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4
+                train_dataset,
+                batch_size=BATCH_SIZE,
+                shuffle=True,
+                num_workers=4,
+                pin_memory=True,
             )
             total_train_batches = len(train_loader)
 
             val_loader = GeoDataLoader(
-                val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4
+                val_dataset,
+                batch_size=BATCH_SIZE,
+                shuffle=False,
+                num_workers=4,
+                pin_memory=True,
             )
 
             first_graph = next(iter(train_loader))
