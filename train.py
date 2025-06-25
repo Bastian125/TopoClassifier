@@ -6,7 +6,6 @@ Updated to use pre-split HDF5 files: *_train.h5, *_val.h5, *_test.h5.
 # ---------- Imports ---------- #
 import os
 import argparse
-import math
 import numpy as np
 import matplotlib.pyplot as plt
 import h5py
@@ -24,7 +23,7 @@ from tqdm import tqdm
 
 from config import data_save_path, output_path
 from io_utils import ensure_dir_exists
-from dataloader import HDF5Dataset, GraphBatchIterableDataset
+from dataloader import HDF5Dataset, LazyGraphDataset
 from models import DNNModel, GATNet
 from evaluate import (
     plot_roc_curve,
@@ -241,14 +240,6 @@ def get_predictions(model, loader):
     return np.array(y_true), np.array(y_pred)
 
 
-def count_graphs(files):
-    count = 0
-    for file in files:
-        data = torch.load(file)
-        count += len(data)
-    return count
-
-
 # ---------- Main ---------- #
 def main():
     output_dir = os.path.join(output_path, "ML", train_dataset_str)
@@ -321,29 +312,23 @@ def main():
             plot_training_history(history)
 
         if model_str == "GATNet":
-            print("GATNet")
             train_pattern = os.path.join(
-                data_save_path, f"{args.train_campaign}_graphs_train_batch*.pt"
+                data_save_path, f"{args.train_campaign}_graphs_train_chunk*.pt"
             )
             val_pattern = os.path.join(
-                data_save_path, f"{args.train_campaign}_graphs_val_batch*.pt"
+                data_save_path, f"{args.train_campaign}_graphs_val_chunk*.pt"
             )
 
-            train_files = sorted(glob.glob(train_pattern))
-            val_files = sorted(glob.glob(val_pattern))
-            train_graphs = count_graphs(train_files)
-            val_graphs = count_graphs(val_files)
-            num_train_batches = math.ceil(train_graphs / BATCH_SIZE)
-            num_val_batches = math.ceil(val_graphs / BATCH_SIZE)
-
-            train_dataset = GraphBatchIterableDataset(train_pattern)
-            val_dataset = GraphBatchIterableDataset(val_pattern)
+            train_dataset = LazyGraphDataset(train_pattern)
+            val_dataset = LazyGraphDataset(val_pattern)
 
             train_loader = GeoDataLoader(
-                train_dataset, batch_size=None, shuffle=False
+                train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=4
             )
+            total_train_batches = len(train_loader)
+
             val_loader = GeoDataLoader(
-                val_dataset, batch_size=None, shuffle=False
+                val_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4
             )
 
             first_graph = next(iter(train_loader))
@@ -365,7 +350,12 @@ def main():
                 model.train()
                 train_loss = 0
                 num_batches = 0
-                for batch in train_loader:
+                loop = tqdm(
+                    train_loader,
+                    total=total_train_batches,
+                    desc=f"Epoch {epoch+1}/{EPOCHS}",
+                )
+                for batch in loop:
                     batch = batch.to(DEVICE)
                     optimizer.zero_grad()
                     with autocast():
@@ -374,7 +364,9 @@ def main():
                     scaler.scale(loss).backward()
                     scaler.step(optimizer)
                     scaler.update()
+
                     train_loss += loss.item()
+                    loop.set_postfix(loss=loss.item())
                     num_batches += 1
                 train_loss /= num_batches if num_batches > 0 else 1
 
