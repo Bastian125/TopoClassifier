@@ -258,7 +258,7 @@ def normalize_data(train, val, test, tag):
     print(f"Saved normalization stats to {stats_path}")
 
 
-def save_split(df, base_name, tag):
+def save_split(df, base_name, tag, pos_weight=None):
     """
     Save a dictionary of numpy arrays as an HDF5 file.
     """
@@ -266,6 +266,8 @@ def save_split(df, base_name, tag):
     with h5py.File(output_path, "w") as f:
         for key, val in df.items():
             f.create_dataset(key, data=val)
+        if pos_weight is not None:
+            f.attrs["pos_weight"] = pos_weight
     print(f"Saved {tag} split to {output_path}")
 
 
@@ -468,21 +470,11 @@ def main():
 
         train, val, test = split_data_full(combined)
 
-        # Compute class weights (for use in GNN training)
-        unique, counts = np.unique(train["label"], return_counts=True)
+        # Compute class weights
         class_weights = compute_class_weight(
             class_weight="balanced", classes=np.array([0, 1]), y=train["label"]
         )
         pos_weight = class_weights[1] / class_weights[0]
-        
-        print(f"[INFO] Training set label distribution: {dict(zip(unique, counts))}")
-        print(f"[INFO] Computed pos_weight: {pos_weight:.4f}")
-        
-        # Save to file for later use in training
-        weight_file = os.path.join(save_path, f"{tag}_pos_weight.txt")
-        with open(weight_file, "w") as f:
-            f.write(f"{pos_weight:.6f}\n")
-        print(f"Saved pos_weight to {weight_file}")
 
         normalize_data(train, val, test, tag)
 
@@ -490,9 +482,9 @@ def main():
         compute_jet_features(val)
         compute_jet_features(test)
 
-        save_split(train, tag, "norm_train")
-        save_split(val, tag, "norm_val")
-        save_split(test, tag, "norm_test")
+        save_split(train, tag, "norm_train", pos_weight=pos_weight)
+        save_split(val, tag, "norm_val", pos_weight=pos_weight)
+        save_split(test, tag, "norm_test", pos_weight=pos_weight)
         return
 
     if args.full:
@@ -528,15 +520,22 @@ def main():
             }
 
             train, val, test = split_data_full(combined)
+
+            # Compute class weights
+            class_weights = compute_class_weight(
+                class_weight="balanced", classes=np.array([0, 1]), y=train["label"]
+            )
+            pos_weight = class_weights[1] / class_weights[0]
+
             normalize_data(train, val, test, tag)
 
             compute_jet_features(train)
             compute_jet_features(val)
             compute_jet_features(test)
 
-            save_split(train, tag, "norm_train")
-            save_split(val, tag, "norm_val")
-            save_split(test, tag, "norm_test")
+            save_split(train, tag, "norm_train", pos_weight=pos_weight)
+            save_split(val, tag, "norm_val", pos_weight=pos_weight)
+            save_split(test, tag, "norm_test", pos_weight=pos_weight)
 
 
 if __name__ == "__main__":
