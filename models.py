@@ -51,7 +51,7 @@ class DNNModel(nn.Module):
         return self.model(x)
 
 
-class GATNet(nn.Module):
+class GAT(nn.Module):
     def __init__(self, in_channels):
         super(GATNet, self).__init__()
 

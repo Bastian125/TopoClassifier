@@ -16,15 +16,14 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torch_geometric.loader import DataLoader as GeoDataLoader
 from torch.amp import GradScaler, autocast
 from sklearn.utils.class_weight import compute_class_weight
 from tqdm import tqdm
 
 from config import data_save_path, output_path
 from io_utils import ensure_dir_exists
-from dataloader import HDF5Dataset, LazyGraphDataset
-from models import DNNModel, GATNet
+from dataloader import HDF5Dataset, ChunkedGraphDataset
+from models import DNNModel, GAT
 from evaluate import (
     plot_roc_curve,
     plot_precision_recall,
@@ -98,9 +97,9 @@ model_group.add_argument(
     help="DNN model that classifies hard-scatter and pile-up clusters.",
 )
 model_group.add_argument(
-    "--GATNet",
+    "--GAT",
     action="store_true",
-    help="Graph Attention Network (GATNet) for topo-cluster classification.",
+    help="Graph Attention Network (GAT) for topo-cluster classification.",
 )
 
 
@@ -128,8 +127,8 @@ def campaign_to_dataset(campaign):
 train_dataset_str = campaign_to_dataset(args.train_campaign)
 if args.DNN:
     model_str = "DNN"
-elif args.GATNet:
-    model_str = "GATNet"
+elif args.GAT:
+    model_str = "GAT"
 
 
 # Set learning rate and batch size depending on Run2 or Run3
@@ -227,6 +226,90 @@ def train_model(model, train_loader, val_loader, criterion, optimizer):
     return model, history
 
 
+def train_GNN(train_dataset, val_dataset, input_dim, output_dir, model_str):
+    """Train GAT model with early stopping and save results like the DNN block."""
+    train_loader = train_dataset  # Already batched via ChunkedGraphDataset
+    val_loader = val_dataset
+
+    model = GAT(input_dim).to(DEVICE)
+    criterion = nn.BCEWithLogitsLoss()
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    scaler = GradScaler()
+
+    best_val_loss = float("inf")
+    wait = 0
+    history = {"train_loss": [], "val_loss": []}
+
+    for epoch in range(EPOCHS):
+        print(f"Starting epoch {epoch+1}/{EPOCHS}", flush=True)
+        start_time = time.time()
+
+        model.train()
+        train_loss = 0
+        num_batches = 0
+
+        for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS}"):
+            batch = batch.to(DEVICE)
+            optimizer.zero_grad()
+            with autocast(device_type=DEVICE.type):
+                outputs = model(batch.x, batch.edge_index)
+                loss = criterion(outputs.view(-1), batch.y.float())
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
+
+            train_loss += loss.item()
+            num_batches += 1
+
+        train_loss /= max(1, num_batches)
+
+        # Validation loop
+        model.eval()
+        val_loss = 0
+        val_batches = 0
+        with torch.no_grad():
+            for batch in val_loader:
+                batch = batch.to(DEVICE)
+                outputs = model(batch.x, batch.edge_index)
+                loss = criterion(outputs.view(-1), batch.y.float())
+                val_loss += loss.item()
+                val_batches += 1
+        val_loss /= max(1, val_batches)
+
+        elapsed = time.time() - start_time
+        print(
+            f"Epoch {epoch+1:3d} - Train Loss: {train_loss:.4f} - Val Loss: {val_loss:.4f} - Time: {elapsed:.1f}s"
+        )
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(val_loss)
+
+        # Save best model
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            torch.save(
+                model.state_dict(),
+                os.path.join(output_dir, f"{model_str}_best.pt"),
+            )
+            wait = 0
+        else:
+            wait += 1
+            if epoch >= 100 and wait >= 20:
+                print("Early stopping triggered.")
+                break
+
+    # Final save
+    model.load_state_dict(torch.load(os.path.join(output_dir, f"{model_str}_best.pt")))
+    torch.save(model.state_dict(), os.path.join(output_dir, f"{model_str}.pt"))
+
+    # Save history
+    with h5py.File(os.path.join(output_dir, f"{model_str}_history.h5"), "w") as f:
+        for k, v in history.items():
+            f.create_dataset(k, data=v)
+
+    plot_training_history(history)
+    return model, history
+
+
 def get_predictions(model, loader):
     """Run inference and return true and predicted probabilities."""
     model.eval()
@@ -311,7 +394,7 @@ def main():
             )
             plot_training_history(history)
 
-        if model_str == "GATNet":
+        if model_str == "GAT":
             train_pattern = os.path.join(
                 data_save_path, f"{args.train_campaign}_graphs_train_chunk*.pt"
             )
@@ -319,111 +402,43 @@ def main():
                 data_save_path, f"{args.train_campaign}_graphs_val_chunk*.pt"
             )
 
-            train_dataset = LazyGraphDataset(train_pattern)
-            val_dataset = LazyGraphDataset(val_pattern)
+            train_dataset = ChunkedGraphDataset(train_pattern, batch_size=BATCH_SIZE)
+            val_dataset = ChunkedGraphDataset(val_pattern, batch_size=BATCH_SIZE)
 
-            train_loader = GeoDataLoader(
-                train_dataset,
-                batch_size=BATCH_SIZE,
-                shuffle=True,
-                num_workers=4,
-                pin_memory=True,
-            )
-            total_train_batches = len(train_loader)
+            # Peek to determine input dimension
+            first_graph_batch = next(iter(train_dataset))
+            input_dim = first_graph_batch.x.shape[1]
 
-            val_loader = GeoDataLoader(
-                val_dataset,
-                batch_size=BATCH_SIZE,
-                shuffle=False,
-                num_workers=4,
-                pin_memory=True,
+            print("Initialise and train model...")
+            model, history = train_GNN(
+                train_dataset=train_dataset,
+                val_dataset=val_dataset,
+                input_dim=input_dim,
+                output_dir=output_dir,
+                model_str=model_str,
             )
 
-            first_graph = next(iter(train_loader))
-            input_dim = first_graph.x.shape[1]
-
-            print("Initialise model...")
-            model = GATNet(input_dim).to(DEVICE)
-            criterion = nn.BCEWithLogitsLoss()
-            optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-            scaler = GradScaler()
-
-            best_val_loss = float("inf")
-            wait = 0
-            history = {"train_loss": [], "val_loss": []}
-
-            for epoch in range(EPOCHS):
-                print(f"Starting epoch {epoch+1}/{EPOCHS}", flush=True)
-                start_time = time.time()
-                model.train()
-                train_loss = 0
-                num_batches = 0
-                loop = tqdm(
-                    train_loader,
-                    total=total_train_batches,
-                    desc=f"Epoch {epoch+1}/{EPOCHS}",
-                )
-                for batch in loop:
-                    batch = batch.to(DEVICE)
-                    optimizer.zero_grad()
-                    with autocast():
-                        outputs = model(batch.x, batch.edge_index)
-                        loss = criterion(outputs.view(-1), batch.y.float())
-                    scaler.scale(loss).backward()
-                    scaler.step(optimizer)
-                    scaler.update()
-
-                    train_loss += loss.item()
-                    loop.set_postfix(loss=loss.item())
-                    num_batches += 1
-                train_loss /= num_batches if num_batches > 0 else 1
-
+            # Get train ROC, threshold and training history
+            def get_predictions_GNN(model, loader):
                 model.eval()
-                val_loss = 0
-                val_batches = 0
+                y_true, y_pred = [], []
                 with torch.no_grad():
-                    for batch in val_loader:
+                    for batch in loader:
                         batch = batch.to(DEVICE)
-                        outputs = model(batch.x, batch.edge_index)
-                        loss = criterion(outputs.view(-1), batch.y.float())
-                        val_loss += loss.item()
-                        val_batches += 1
-                val_loss /= val_batches if val_batches > 0 else 1
+                        outputs = (
+                            torch.sigmoid(model(batch.x, batch.edge_index))
+                            .cpu()
+                            .numpy()
+                            .flatten()
+                        )
+                        y_true.extend(batch.y.cpu().numpy())
+                        y_pred.extend(outputs)
+                return np.array(y_true), np.array(y_pred)
 
-                elapsed = time.time() - start_time
-                print(
-                    f"Epoch {epoch+1:3d} - Train Loss: {train_loss:.4f} - Val Loss: {val_loss:.4f} - Time: {elapsed:.1f}s"
-                )
-                history["train_loss"].append(train_loss)
-                history["val_loss"].append(val_loss)
-
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
-                    torch.save(
-                        model.state_dict(),
-                        os.path.join(output_dir, f"{model_str}_best.pt"),
-                    )
-                    wait = 0
-                else:
-                    wait += 1
-                    if epoch >= 100 and wait >= 20:
-                        print("Early stopping triggered.")
-                        break
-
-            # Load and save final model
-            model.load_state_dict(
-                torch.load(os.path.join(output_dir, f"{model_str}_best.pt"))
+            y_true_train, y_pred_train = get_predictions_GNN(model, train_dataset)
+            roc_prefix_train = os.path.join(
+                output_dir, f"{model_str}_on_{args.train_campaign}_train"
             )
-            torch.save(model.state_dict(), os.path.join(output_dir, f"{model_str}.pt"))
-
-            # Save training history
-            with h5py.File(
-                os.path.join(output_dir, f"{model_str}_history.h5"), "w"
-            ) as f:
-                for k, v in history.items():
-                    f.create_dataset(k, data=v)
-
-            # Plot training history
             plot_training_history(history)
 
     if args.test_campaign:
@@ -491,12 +506,12 @@ def main():
         with h5py.File(test_file, "r") as f:
             cluster_response = f["cluster_response"][:]
 
-    plot_cluster_response_comparison_histogram(
-        true_response=cluster_response,
-        y_pred_probs=y_pred,
-        prefix_path=roc_prefix_test,
-        threshold=best_threshold,
-    )
+        plot_cluster_response_comparison_histogram(
+            true_response=cluster_response,
+            y_pred_probs=y_pred,
+            prefix_path=roc_prefix_test,
+            threshold=best_threshold,
+        )
 
     if args.plot:
         history_path = os.path.join(output_dir, f"{model_str}_history.h5")
