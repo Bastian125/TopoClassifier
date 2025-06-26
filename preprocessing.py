@@ -15,6 +15,7 @@ import psutil
 import glob
 
 from sklearn.model_selection import train_test_split
+from sklearn.utils.class_weight import compute_class_weight
 import torch
 from torch_geometric.data import Data
 
@@ -317,7 +318,7 @@ def build_graphs(
     with h5py.File(h5_path, "r") as f:
         data = {k: f[k][:] for k in f.keys()}
     df = pd.DataFrame(data)
-    print(f"[✓] Loaded {len(df)} entries")
+    print(f"Loaded {len(df)} entries")
 
     grouped = df.groupby(["eventNumber", "jetCnt"])
     total_jets = len(grouped)
@@ -346,16 +347,10 @@ def build_graphs(
         edge_index = torch.combinations(node_indices, r=2).t()
         edge_index = torch.cat([edge_index, edge_index.flip(0)], dim=1)
 
-        num_signal = (y == 1).sum().item()
-        num_pu = (y == 0).sum().item()
-        pu_weight = num_signal / num_pu if num_signal > 0 and num_pu > 0 else 1.0
-        weights = torch.where(y == 0, pu_weight, 1.0)
-
         graph = Data(
             x=x,
             y=y,
             edge_index=edge_index,
-            weights=weights,
             eventNumber=torch.full((num_nodes,), event, dtype=torch.int32),
             jetCnt=torch.full((num_nodes,), jet, dtype=torch.int32),
         )
@@ -391,7 +386,7 @@ def build_graphs(
             merged_graphs.extend(torch.load(file))
 
         torch.save(merged_graphs, output_path)
-        print(f"[✓] Merged {len(merged_graphs)} graphs to: {output_path}")
+        print(f"Merged {len(merged_graphs)} graphs to: {output_path}")
 
 
 def build_and_save_jetwise_graphs(tag, feature_keys):
@@ -410,7 +405,7 @@ def build_and_save_jetwise_graphs(tag, feature_keys):
 
         print_memory()
 
-        print(f"  [✓] Saved graphs to: {output_path}")
+        print(f"Saved graphs to: {output_path}")
 
 
 # ---------- Main ---------- #
@@ -472,6 +467,23 @@ def main():
             }
 
         train, val, test = split_data_full(combined)
+
+        # Compute class weights (for use in GNN training)
+        unique, counts = np.unique(train["label"], return_counts=True)
+        class_weights = compute_class_weight(
+            class_weight="balanced", classes=np.array([0, 1]), y=train["label"]
+        )
+        pos_weight = class_weights[1] / class_weights[0]
+        
+        print(f"[INFO] Training set label distribution: {dict(zip(unique, counts))}")
+        print(f"[INFO] Computed pos_weight: {pos_weight:.4f}")
+        
+        # Save to file for later use in training
+        weight_file = os.path.join(save_path, f"{tag}_pos_weight.txt")
+        with open(weight_file, "w") as f:
+            f.write(f"{pos_weight:.6f}\n")
+        print(f"Saved pos_weight to {weight_file}")
+
         normalize_data(train, val, test, tag)
 
         compute_jet_features(train)
