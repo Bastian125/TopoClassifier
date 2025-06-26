@@ -9,7 +9,6 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 import h5py
-import glob
 import time
 
 import torch
@@ -17,7 +16,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.amp import GradScaler, autocast
-from sklearn.utils.class_weight import compute_class_weight
 from tqdm import tqdm
 
 from config import data_save_path, output_path
@@ -323,6 +321,21 @@ def get_predictions(model, loader):
     return np.array(y_true), np.array(y_pred)
 
 
+def get_predictions_GNN(model, loader):
+    """Run inference and return true and predicted probabilities for GNN."""
+    model.eval()
+    y_true, y_pred = [], []
+    with torch.no_grad():
+        for batch in loader:
+            batch = batch.to(DEVICE)
+            outputs = (
+                torch.sigmoid(model(batch.x, batch.edge_index)).cpu().numpy().flatten()
+            )
+            y_true.extend(batch.y.cpu().numpy())
+            y_pred.extend(outputs)
+    return np.array(y_true), np.array(y_pred)
+
+
 # ---------- Main ---------- #
 def main():
     output_dir = os.path.join(output_path, "ML", train_dataset_str)
@@ -360,12 +373,9 @@ def main():
                 persistent_workers=True,
             )
 
-            y_train = train_dataset.labels.numpy()
-            weights = compute_class_weight(
-                class_weight="balanced", classes=np.unique(y_train), y=y_train
-            )
-            class_weights = torch.tensor(weights, dtype=torch.float32).to(DEVICE)
-            pos_weight = class_weights[1] / class_weights[0]
+            with h5py.File(train_file, "r") as f:
+                pos_weight = f.attrs["pos_weight"]
+            pos_weight = torch.tensor(pos_weight, dtype=torch.float32).to(DEVICE)
 
             uncompiled_model = DNNModel(input_dim).to(DEVICE)
             model = torch.compile(uncompiled_model)
@@ -387,11 +397,6 @@ def main():
                 for key, values in history.items():
                     f.create_dataset(key, data=values)
 
-            # Get train ROC, threshold and training history
-            y_true_train, y_pred_train = get_predictions(model, train_loader)
-            roc_prefix_train = os.path.join(
-                output_dir, f"{model_str}_on_{args.train_campaign}_train"
-            )
             plot_training_history(history)
 
         if model_str == "GAT":
@@ -418,31 +423,9 @@ def main():
                 model_str=model_str,
             )
 
-            # Get train ROC, threshold and training history
-            def get_predictions_GNN(model, loader):
-                model.eval()
-                y_true, y_pred = [], []
-                with torch.no_grad():
-                    for batch in loader:
-                        batch = batch.to(DEVICE)
-                        outputs = (
-                            torch.sigmoid(model(batch.x, batch.edge_index))
-                            .cpu()
-                            .numpy()
-                            .flatten()
-                        )
-                        y_true.extend(batch.y.cpu().numpy())
-                        y_pred.extend(outputs)
-                return np.array(y_true), np.array(y_pred)
-
-            y_true_train, y_pred_train = get_predictions_GNN(model, train_dataset)
-            roc_prefix_train = os.path.join(
-                output_dir, f"{model_str}_on_{args.train_campaign}_train"
-            )
             plot_training_history(history)
 
     if args.test_campaign:
-        test_dataset_str = campaign_to_dataset(args.test_campaign)
         test_out_dir = os.path.join(
             output_path, "ML", train_dataset_str, f"test_on_{args.test_campaign}"
         )
