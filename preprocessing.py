@@ -28,8 +28,6 @@ from config import (
     data_save_path as save_path,
 )
 
-from io_utils import ensure_dir_exists
-
 # ---------- Argument Parser ---------- #
 parser = argparse.ArgumentParser(description="Preprocess ROOT files and HDF5 splits.")
 mode_group = parser.add_mutually_exclusive_group(required=True)
@@ -360,7 +358,7 @@ def build_graphs(
         graph_list.append(graph)
 
         if len(graph_list) >= chunk_size:
-            chunk_path = output_path.replace(".pt", f"_chunk{chunk_idx}.pt")
+            chunk_path = output_path.replace(".pt", f"_chunk{chunk_idx:03d}.pt")
             torch.save(graph_list, chunk_path)
             print(
                 f"[{datetime.now()}] Saved chunk {chunk_idx} with {len(graph_list)} graphs → {chunk_path}"
@@ -370,7 +368,7 @@ def build_graphs(
             chunk_idx += 1
 
     if graph_list:
-        chunk_path = output_path.replace(".pt", f"_chunk{chunk_idx}.pt")
+        chunk_path = output_path.replace(".pt", f"_chunk{chunk_idx:03d}.pt")
         torch.save(graph_list, chunk_path)
         print(
             f"[{datetime.now()}] Saved final chunk {chunk_idx} with {len(graph_list)} graphs → {chunk_path}"
@@ -403,7 +401,7 @@ def build_and_save_jetwise_graphs(tag, feature_keys):
 
         print_memory()
 
-        build_graphs(h5_path, feature_keys, output_path, chunk_size=100000)
+        build_graphs(h5_path, feature_keys, output_path, chunk_size=1000000)
 
         print_memory()
 
