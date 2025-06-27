@@ -16,11 +16,12 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.amp import GradScaler, autocast
+from torch_geometric.loader import DataLoader as GeoDataLoader
 from tqdm import tqdm
 
 from config import data_save_path, output_path
 from io_utils import ensure_dir_exists
-from dataloader import HDF5Dataset, ChunkedGraphDataset
+from dataloader import HDF5Dataset, JetGraphIterableDataset
 from models import DNNModel, GAT
 from evaluate import (
     plot_roc_curve,
@@ -48,6 +49,30 @@ feature_keys = [
     "cluster_LATERAL",
     "cluster_time",
     "cluster_ISOLATION",
+]
+
+jet_feature_keys = [
+    "clusterE",
+    "cluster_FIRST_ENG_DENS",
+    "cluster_EM_PROBABILITY",
+    "cluster_CENTER_LAMBDA",
+    "cluster_CENTER_MAG",
+    "cluster_nCells_tot",
+    "cluster_ENG_FRAC_EM",
+    "cluster_SECOND_TIME",
+    "cluster_AVG_TILE_Q",
+    "cluster_AVG_LAR_Q",
+    "cluster_SECOND_R",
+    "cluster_LATERAL",
+    "cluster_time",
+    "cluster_ISOLATION",
+    "nPrimVtx",
+    "avgMu",
+    "jetRawE",
+    "diffEta",
+    "zT",
+    "zL",
+    "zRel",
 ]
 
 LEARNING_RATE_RUN2 = 1e-3
@@ -95,6 +120,11 @@ model_group.add_argument(
     help="DNN model that classifies hard-scatter and pile-up clusters.",
 )
 model_group.add_argument(
+    "--JetDNN",
+    action="store_true",
+    help="DNN model that classifies hard-scatter and pile-up clusters with cluster and jet features.",
+)
+model_group.add_argument(
     "--GAT",
     action="store_true",
     help="Graph Attention Network (GAT) for topo-cluster classification.",
@@ -125,6 +155,8 @@ def campaign_to_dataset(campaign):
 train_dataset_str = campaign_to_dataset(args.train_campaign)
 if args.DNN:
     model_str = "DNN"
+elif args.JetDNN:
+    model_str = "JetDNN"
 elif args.GAT:
     model_str = "GAT"
 
@@ -226,8 +258,8 @@ def train_model(model, train_loader, val_loader, criterion, optimizer):
 
 def train_GNN(train_dataset, val_dataset, input_dim, output_dir, model_str):
     """Train GAT model with early stopping and save results like the DNN block."""
-    train_loader = train_dataset  # Already batched via ChunkedGraphDataset
-    val_loader = val_dataset
+    train_loader = GeoDataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=4)
+    val_loader = GeoDataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=4)
 
     model = GAT(input_dim).to(DEVICE)
     criterion = nn.BCEWithLogitsLoss()
@@ -399,6 +431,61 @@ def main():
 
             plot_training_history(history)
 
+        if model_str == "JetDNN":
+            train_file = os.path.join(
+                data_save_path, f"{args.train_campaign}_norm_train.h5"
+            )
+            val_file = os.path.join(
+                data_save_path, f"{args.train_campaign}_norm_val.h5"
+            )
+
+            train_dataset = HDF5Dataset(train_file, jet_feature_keys, "label")
+            val_dataset = HDF5Dataset(val_file, jet_feature_keys, "label")
+            input_dim = train_dataset[0][0].shape[0]
+
+            train_loader = DataLoader(
+                train_dataset,
+                batch_size=BATCH_SIZE,
+                shuffle=True,
+                num_workers=4,
+                pin_memory=True,
+                persistent_workers=True,
+            )
+            val_loader = DataLoader(
+                val_dataset,
+                batch_size=BATCH_SIZE,
+                shuffle=False,
+                num_workers=4,
+                pin_memory=True,
+                persistent_workers=True,
+            )
+
+            with h5py.File(train_file, "r") as f:
+                pos_weight = f.attrs["pos_weight"]
+            pos_weight = torch.tensor(pos_weight, dtype=torch.float32).to(DEVICE)
+
+            uncompiled_model = DNNModel(input_dim).to(DEVICE)
+            model = torch.compile(uncompiled_model)
+            criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+            optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
+
+            model, history = train_model(
+                model, train_loader, val_loader, criterion, optimizer
+            )
+
+            torch.save(
+                uncompiled_model.state_dict(),
+                os.path.join(output_dir, f"{model_str}.pt"),
+            )
+
+            with h5py.File(
+                os.path.join(output_dir, f"{model_str}_history.h5"), "w"
+            ) as f:
+                for key, values in history.items():
+                    f.create_dataset(key, data=values)
+
+            plot_training_history(history)
+
         if model_str == "GAT":
             train_pattern = os.path.join(
                 data_save_path, f"{args.train_campaign}_graphs_train_chunk*.pt"
@@ -407,8 +494,8 @@ def main():
                 data_save_path, f"{args.train_campaign}_graphs_val_chunk*.pt"
             )
 
-            train_dataset = ChunkedGraphDataset(train_pattern, batch_size=BATCH_SIZE)
-            val_dataset = ChunkedGraphDataset(val_pattern, batch_size=BATCH_SIZE)
+            train_dataset = JetGraphIterableDataset(train_pattern)
+            val_dataset = JetGraphIterableDataset(val_pattern)
 
             # Peek to determine input dimension
             first_graph_batch = next(iter(train_dataset))
