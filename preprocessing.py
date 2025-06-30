@@ -23,7 +23,6 @@ from config import (
     columns,
     log_features,
     normal_features,
-    node_features,
     data_root_path as root_path,
     data_save_path as save_path,
 )
