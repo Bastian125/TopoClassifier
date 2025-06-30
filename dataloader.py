@@ -2,17 +2,11 @@
 import h5py
 import numpy as np
 import glob
-import re
-import time
-import random
+import os
 
 import torch
 from torch.utils.data import Dataset, IterableDataset
-from torch_geometric.data import Data
-
-
-def natural_sort_key(path):
-    return [int(text) if text.isdigit() else text for text in re.split(r"(\d+)", path)]
+from torch_geometric.loader import DataLoader as GeoDataLoader
 
 
 class HDF5Dataset(Dataset):
@@ -54,42 +48,25 @@ class HDF5Dataset(Dataset):
         return self.data.numpy(), self.labels.numpy()
 
 
-class LazyGraphDataset(Dataset):
-    def __init__(self, file_pattern, chunk_size=100_000, shuffle_chunks=True):
-        self.chunk_paths = sorted(glob.glob(file_pattern), key=natural_sort_key)
-        self.index_map = []
-        self._cache = {}
+class JetGraphIterableDataset(IterableDataset):
+    def __init__(self, file_pattern_or_list, shuffle_files=False):
+        if isinstance(file_pattern_or_list, str):
+            self.files = sorted(glob.glob(file_pattern_or_list))
+        else:
+            self.files = sorted(file_pattern_or_list)
+        self.shuffle_files = shuffle_files
 
-        chunk_order = list(range(len(self.chunk_paths)))
-        if shuffle_chunks:
-            random.shuffle(chunk_order)
+    def __iter__(self):
+        file_list = self.files.copy()
+        if self.shuffle_files:
+            import random
 
-        for chunk_idx in chunk_order:
-            path = self.chunk_paths[chunk_idx]
-            print(f"[INFO] Reading metadata for chunk: {path}")
-            start = time.time()
+            random.shuffle(file_list)
 
-            if chunk_idx < len(self.chunk_paths) - 1:
-                num_graphs = chunk_size
-            else:
-                graphs = torch.load(path, map_location="cpu")
-                num_graphs = len(graphs)
-                print(
-                    f"[✓] Loaded last chunk: {num_graphs} graphs in {time.time() - start:.2f} sec"
-                )
-
-            for i in range(num_graphs):
-                self.index_map.append((chunk_idx, i))
-
-    def __len__(self):
-        return len(self.index_map)
-
-    def __getitem__(self, idx):
-        chunk_idx, graph_idx = self.index_map[idx]
-
-        if chunk_idx not in self._cache:
-            self._cache = {}  # clear previous chunk
-            path = self.chunk_paths[chunk_idx]
-            self._cache[chunk_idx] = torch.load(path, map_location="cpu")
-
-        return self._cache[chunk_idx][graph_idx]
+        for file_path in file_list:
+            try:
+                data_list = torch.load(file_path, map_location="cpu")
+                for graph in data_list:
+                    yield graph
+            except Exception as e:
+                print(f"Skipping {file_path} due to error: {e}")
