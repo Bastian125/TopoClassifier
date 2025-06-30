@@ -66,8 +66,6 @@ jet_feature_keys = [
     "cluster_LATERAL",
     "cluster_time",
     "cluster_ISOLATION",
-    "nPrimVtx",
-    "avgMu",
     "jetRawE",
     "diffEta",
     "zT",
@@ -178,22 +176,45 @@ def plot_training_history(history):
         2, 1, figsize=(10, 8), gridspec_kw={"height_ratios": [3, 1]}
     )
 
+    # Top plot: Loss curves
     axs[0].plot(history["train_loss"], label="Training Loss")
     axs[0].plot(history["val_loss"], label="Validation Loss")
     axs[0].set_ylabel("Loss")
     axs[0].legend()
     axs[0].grid(True)
+    axs[0].set_xlim(0, len(history["train_loss"]))
 
+    # Annotate min val loss
+
+    min_epoch = np.argmin(history["val_loss"]) + 1
+    min_val = history["val_loss"][min_epoch - 1]
+
+    axs[0].annotate(
+        f"Min Val Loss\nEpoch {min_epoch}",
+        xy=(min_epoch, min_val),
+        xycoords="data",
+        xytext=(30, 150),
+        textcoords="offset points",
+        arrowprops=dict(arrowstyle="->", lw=1.2),
+        bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8),
+        fontsize=9,
+        ha="center"
+    )
+
+
+    # Bottom plot: Loss difference
     loss_diff = np.array(history["val_loss"]) - np.array(history["train_loss"])
     axs[1].plot(loss_diff, label="val_loss - loss", linestyle="--")
     axs[1].axhline(0, color="black", linewidth=0.5)
     axs[1].set_ylabel("Loss Diff")
     axs[1].set_xlabel("Epoch")
     axs[1].grid(True)
+    axs[1].set_xlim(0, len(history["train_loss"]))
 
     output_dir = os.path.join(output_path, "ML", train_dataset_str)
     ensure_dir_exists(output_dir)
     save_path = os.path.join(output_dir, f"{model_str}_training_history.pdf")
+    plt.tight_layout()
     plt.savefig(save_path)
     plt.close()
     print(f"Training history saved to {save_path}")
@@ -525,14 +546,22 @@ def main():
             args.test_campaign,
         )
 
-        model_cls = DNNModel
-        model = model_cls(len(feature_keys)).to(DEVICE)
+        if model_str == "DNN":
+            model_cls = DNNModel
+            model = model_cls(len(feature_keys)).to(DEVICE)
+        elif model_str == "JetDNN":
+            model_cls = DNNModel
+            model = model_cls(len(jet_feature_keys)).to(DEVICE)
+
         state_dict = torch.load(os.path.join(output_dir, f"{model_str}_best.pt"))
         state_dict = remove_prefix_from_state_dict(state_dict)
         model.load_state_dict(state_dict)
 
         test_file = os.path.join(data_save_path, f"{args.test_campaign}_norm_test.h5")
-        test_dataset = HDF5Dataset(test_file, feature_keys, "label")
+        if model_str == "DNN":
+            test_dataset = HDF5Dataset(test_file, feature_keys, "label")
+        elif model_str == "JetDNN":
+            test_dataset = HDF5Dataset(test_file, jet_feature_keys, "label")
         test_loader = DataLoader(
             test_dataset,
             batch_size=BATCH_SIZE,
