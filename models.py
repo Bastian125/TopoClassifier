@@ -53,7 +53,7 @@ class DNNModel(nn.Module):
 
 class GAT(nn.Module):
     def __init__(self, in_channels):
-        super(GATNet, self).__init__()
+        super(GAT, self).__init__()
 
         # GAT layers
         self.conv1 = GATConv(in_channels, 16, heads=8, dropout=0.1)
