@@ -14,10 +14,30 @@ from config import data_save_path, output_path, plot_settings
 from io_utils import ensure_dir_exists
 
 # ---------- File Config ---------- #
-data20 = "mc20e_withPU_raw.h5"
-data23 = "mc23e_withPU_raw.h5"
-data_noPU_20 = "mc20e_noPU_raw.h5"
-data_noPU_23 = "mc23e_noPU_raw.h5"
+data_files = {
+    "20": {
+        "a": "mc20a_withPU_raw.h5",
+        "d": "mc20d_withPU_raw.h5",
+        "e": "mc20e_withPU_raw.h5",
+    },
+    "23": {
+        "a": "mc23a_withPU_raw.h5",
+        "d": "mc23d_withPU_raw.h5",
+        "e": "mc23e_withPU_raw.h5",
+    },
+}
+data_files_noPU = {
+    "20": {
+        "a": "mc20a_noPU_raw.h5",
+        "d": "mc20d_noPU_raw.h5",
+        "e": "mc20e_noPU_raw.h5",
+    },
+    "23": {
+        "a": "mc23a_noPU_raw.h5",
+        "d": "mc23d_noPU_raw.h5",
+        "e": "mc23e_noPU_raw.h5",
+    },
+}
 
 
 # ---------- Argument Parser ---------- #
@@ -61,30 +81,47 @@ mode_group.add_argument(
 mode_group.add_argument(
     "--PU_response",
     action="store_true",
-    help="Plot mean and median cluster response in n_PV bins for clusters with the complete energy ramge,"
+    help="Plot mean and median cluster response in n_PV bins for clusters with the complete energy range,"
     "clusters with energy lower than 100~GeV, and clusters with energy greater than or equal to 100~GeV ",
 )
+mode_group.add_argument("--all", action="store_true", help="Make every plot.")
 args = parser.parse_args()
 
 
-# ---------- Helper Functions ---------- #
-def load_feature(feature, campaign, PU=True):
-    """
-    Load feature for MC20e or MC23e from HDF5 file.
-    """
-    if PU == False:
-        if campaign == 20:
-            data = data_noPU_20
-        elif campaign == 23:
-            data = data_noPU_23
-    elif PU == True:
-        if campaign == 20:
-            data = data20
-        elif campaign == 23:
-            data = data23
+# ---------- Plot Config ---------- #
+plt.rcParams.update(
+    {
+        "axes.prop_cycle": plt.cycler(
+            color=[
+                "#0072B2",  # Blue
+                "#D55E00",  # Vermilion
+                "#009E73",  # Bluish green
+                "#E69F00",  # Orange
+                "#56B4E9",  # Sky blue
+                "#F0E442",  # Yellow
+                "#CC79A7",  # Reddish purple
+                "#000000",  # Black
+            ]
+        ),
+        "lines.linewidth": 1.8,
+        "lines.markersize": 5,
+        "legend.frameon": False,
+        "legend.fontsize": 11,
+        "font.size": 12,
+        "text.usetex": True,
+    }
+)
 
+
+# ---------- Helper Functions ---------- #
+def load_feature(feature, campaign, subcampaign, PU=True):
+    data = (
+        data_files_noPU[str(campaign)][subcampaign]
+        if not PU
+        else data_files[str(campaign)][subcampaign]
+    )
     file_path = os.path.join(data_save_path, data)
-    print(f"Load {feature} for MC{campaign}e from {file_path}...")
+    print(f"Load {feature} for MC{campaign}{subcampaign} from {file_path}...")
 
     with h5py.File(file_path, "r") as f:
         return f[feature][:]
@@ -93,6 +130,7 @@ def load_feature(feature, campaign, PU=True):
 def plot_feature(
     feature,
     campaign,
+    subcampaign,
     nbins,
     start,
     stop,
@@ -107,7 +145,9 @@ def plot_feature(
     print(f"Plot {feature} for MC{campaign}e...")
     if xlabel is None:
         xlabel = feature
-    feature_data = load_feature(feature=feature, campaign=campaign)
+    feature_data = load_feature(
+        feature=feature, campaign=campaign, subcampaign=subcampaign
+    )
 
     if log:
         bins = np.logspace(np.log10(start), np.log10(stop), nbins)
@@ -122,12 +162,12 @@ def plot_feature(
     plt.tight_layout()
 
 
-def plot_response(campaign):
+def plot_response(campaign, subcampaign):
     """
     Plots response for one MC campaign and for different n_PV bins.
     """
-    response = load_feature("cluster_response", campaign)
-    n_PV = load_feature("nPrimVtx", campaign)
+    response = load_feature("cluster_response", campaign, subcampaign=subcampaign)
+    n_PV = load_feature("nPrimVtx", campaign, subcampaign=subcampaign)
 
     nbins = 100
     beginning = 0
@@ -173,17 +213,19 @@ def plot_response(campaign):
     plt.xlim(lim)
     plt.legend()
     plt.tight_layout()
-    save_plot("response", f"response_{campaign}")
+    save_plot(f"{campaign}{subcampaign}/response", f"response")
     plt.close()
 
 
-def plot_response_with_and_with_out_PU(campaign):
+def plot_response_with_and_with_out_PU(campaign, subcampaign):
     """
     Plots response for one MC campaign and for different n_PV bins.
     """
-    response = load_feature("cluster_response", campaign)
-    response_noPU = load_feature("cluster_response", campaign, PU=False)
-    n_PV = load_feature("nPrimVtx", campaign)
+    response = load_feature("cluster_response", campaign, subcampaign=subcampaign)
+    response_noPU = load_feature(
+        "cluster_response", campaign, subcampaign=subcampaign, PU=False
+    )
+    n_PV = load_feature("nPrimVtx", campaign, subcampaign=subcampaign)
 
     nbins = 100
     beginning = 0
@@ -228,6 +270,7 @@ def plot_response_with_and_with_out_PU(campaign):
         bins=nbins,
         range=hrange,
         histtype="step",
+        linestyle=(0, (5, 10)),
         density=True,
         label="No pile-up",
     )
@@ -237,62 +280,73 @@ def plot_response_with_and_with_out_PU(campaign):
     plt.xlim(lim)
     plt.legend()
     plt.tight_layout()
-    save_plot("response", f"noPU_vs_PU_response_{campaign}")
+    save_plot(f"{campaign}{subcampaign}/response", f"noPU_vs_PU_response_{campaign}")
     plt.close()
 
 
-def plot_mean_meadian_response(campaign, energy):
+def plot_mean_median_response(campaign, subcampaign, energy):
     """
     Plots mean and median response in n_PV bins between 10 and 50 for cluster with the complete energy range, clusters with energy less than 100~GeV, and clusters with energy greater than or equal to 100~GeV
     """
     if energy == "all":
-        response = load_feature("cluster_response", campaign)
-        clusterE = load_feature("clusterE", campaign)
-        n_PV = load_feature("nPrimVtx", campaign)
+        response = load_feature("cluster_response", campaign, subcampaign=subcampaign)
+        clusterE = load_feature("clusterE", campaign, subcampaign=subcampaign)
+        n_PV = load_feature("nPrimVtx", campaign, subcampaign=subcampaign)
     elif energy == "<100~GeV":
-        response = load_feature("cluster_response", campaign)
-        clusterE = load_feature("clusterE", campaign)
-        n_PV = load_feature("nPrimVtx", campaign)
+        response = load_feature("cluster_response", campaign, subcampaign=subcampaign)
+        clusterE = load_feature("clusterE", campaign, subcampaign=subcampaign)
+        n_PV = load_feature("nPrimVtx", campaign, subcampaign=subcampaign)
 
         # Apply cuts
         response = response[clusterE < 100]
         n_PV = n_PV[clusterE < 100]
 
     elif energy == ">=100~GeV":
-        response = load_feature("cluster_response", campaign)
-        clusterE = load_feature("clusterE", campaign)
-        n_PV = load_feature("nPrimVtx", campaign)
+        response = load_feature("cluster_response", campaign, subcampaign=subcampaign)
+        clusterE = load_feature("clusterE", campaign, subcampaign=subcampaign)
+        n_PV = load_feature("nPrimVtx", campaign, subcampaign=subcampaign)
 
         # Apply cuts
         response = response[clusterE >= 100]
         n_PV = n_PV[clusterE >= 100]
 
     n_PV_bins = np.arange(10, 50, 5)
+
     mean_response = []
     median_response = []
+    mean_uncertainty = []
+    median_uncertainty = []
     n_PV_centers = []
 
     for i in range(len(n_PV_bins) - 1):
         n_PV_min, n_PV_max = n_PV_bins[i], n_PV_bins[i + 1]
         n_PV_mask = (n_PV >= n_PV_min) & (n_PV < n_PV_max)
         responses_in_bin = response[n_PV_mask]
+        N = len(responses_in_bin)
 
-        # Avoid empty bins
-        if len(responses_in_bin) > 0:
+        if N > 1:
+            sigma = np.std(responses_in_bin)
             mean_val = np.mean(responses_in_bin)
             median_val = np.median(responses_in_bin)
+            sem = sigma / np.sqrt(N)
+            sigma_median = 1.253 * sigma / np.sqrt(N)
         else:
             mean_val = np.nan
             median_val = np.nan
+            sem = np.nan
+            sigma_median = np.nan
 
-        # Store results
         mean_response.append(mean_val)
         median_response.append(median_val)
+        mean_uncertainty.append(sem)
+        median_uncertainty.append(sigma_median)
         n_PV_centers.append((n_PV_min + n_PV_max) / 2)
 
-    plt.plot(n_PV_centers, mean_response, marker="o", linestyle="None", label="Mean")
-    plt.plot(
-        n_PV_centers, median_response, marker="o", linestyle="None", label="Median"
+    plt.errorbar(
+        n_PV_centers, mean_response, yerr=mean_uncertainty, fmt="o", label="Mean"
+    )
+    plt.errorbar(
+        n_PV_centers, median_response, yerr=median_uncertainty, fmt="s", label="Median"
     )
     plt.xlim(10, 45)
     plt.xlabel(r"$N_{\mathrm{PV}}$")
@@ -300,17 +354,17 @@ def plot_mean_meadian_response(campaign, energy):
     plt.legend()
     plt.tight_layout()
     if energy == "all":
-        save_plot("response", f"mean_median_{campaign}")
+        save_plot(f"{campaign}{subcampaign}/response", f"mean_median")
     elif energy == "<100~GeV":
-        save_plot("response", f"mean_median_<100~GeV_{campaign}")
+        save_plot(f"{campaign}{subcampaign}/response", f"mean_median_<100~GeV")
     elif energy == ">=100~GeV":
-        save_plot("response", f"mean_median_>=100~GeV_{campaign}")
+        save_plot(f"{campaign}{subcampaign}/response", f"mean_median_>=100~GeV")
     plt.close()
 
 
-def plot_run_comparison(features):
+def plot_run_comparison(features, subcampaign):
     """
-    Plot each feature for Run 2 (MC20e) and Run 3 (MC23e) in one plot.
+    Plot each feature for Run 2´ and Run 3 in one plot.
     """
     for feature_key in features:
         settings = plot_settings[feature_key]
@@ -325,8 +379,8 @@ def plot_run_comparison(features):
 
         print(f"Comparing feature '{feature}' between MC20e and MC23e...")
 
-        feature_20 = load_feature(feature, 20)
-        feature_23 = load_feature(feature, 23)
+        feature_20 = load_feature(feature, 20, subcampaign)
+        feature_23 = load_feature(feature, 23, subcampaign)
 
         if log:
             bins = np.logspace(np.log10(start), np.log10(stop), nbins)
@@ -335,19 +389,34 @@ def plot_run_comparison(features):
             bins = nbins
             plt.xlim([start, stop])
 
-        plt.hist(feature_20, density=density, bins=bins, histtype="step", label="MC20e")
-        plt.hist(feature_23, density=density, bins=bins, histtype="step", label="MC23e")
+        plt.hist(
+            feature_20,
+            density=density,
+            bins=bins,
+            histtype="step",
+            label="MC20e",
+        )
+        plt.hist(
+            feature_23,
+            density=density,
+            bins=bins,
+            histtype="step",
+            label="MC23e",
+        )
         plt.xlabel(xlabel)
         plt.ylabel(ylabel)
         plt.legend()
         plt.tight_layout()
-        save_plot("run_comparison", f"{feature}_run_comparison")
+        save_plot(
+            f"run_comparison/{20}{subcampaign}_vs_{23}{subcampaign}",
+            f"{feature}_run_comparison",
+        )
         plt.close()
 
 
-def plot_features_overlayed_by_nPV_bins():
+def plot_features_overlayed_by_nPV_bins(subcampaign):
     """
-    Plot all features for MC20e and MC23e campaigns with overlaid n_PV bins in one plot.
+    Plot all features for MC20 and MC23 campaigns with overlaid n_PV bins in one plot.
     """
     nPV_bins = [
         (None, 10),  # nPV < 10
@@ -361,14 +430,13 @@ def plot_features_overlayed_by_nPV_bins():
         r"$20 \leq n_{\mathrm{PV}} < 30$",
         r"$n_{\mathrm{PV}} > 30$",
     ]
-    colors = ["blue", "orange", "green", "red"]
 
     for campaign in [20, 23]:
-        n_PV = load_feature("nPrimVtx", campaign)
+        n_PV = load_feature("nPrimVtx", campaign, subcampaign=subcampaign)
 
         for feature_key, settings in plot_settings.items():
             feature_name = settings["feature"]
-            feature_data = load_feature(feature_name, campaign)
+            feature_data = load_feature(feature_name, campaign, subcampaign=subcampaign)
             nbins = settings["nbins"]
             start = settings["start"]
             stop = settings["stop"]
@@ -384,8 +452,7 @@ def plot_features_overlayed_by_nPV_bins():
                 bins = nbins
                 plt.xlim([start, stop])
 
-            # Create overlayed histograms
-            for (low, high), label, color in zip(nPV_bins, nPV_labels, colors):
+            for (low, high), label, linestyle in zip(nPV_bins, nPV_labels):
                 if low is None:
                     mask = n_PV < high
                 elif high is None:
@@ -401,7 +468,6 @@ def plot_features_overlayed_by_nPV_bins():
                     density=density,
                     histtype="step",
                     label=label,
-                    color=color,
                 )
 
             plt.xlabel(xlabel)
@@ -410,14 +476,15 @@ def plot_features_overlayed_by_nPV_bins():
             plt.tight_layout()
 
             save_plot(
-                save_dir=f"{campaign}", output_name=f"{feature_name}_nPV_comparison"
+                save_dir=f"{campaign}{subcampaign}/nPV_comparison",
+                output_name=feature_name,
             )
             plt.close()
 
 
-def plot_high_response():
+def plot_high_response(subcampaign):
     """
-    Plot every feature for MC20e and MC23e campaigns, overlaying clusters with response <= 40 and > 40.
+    Plot every feature for MC20 and MC23 campaigns, overlaying clusters with response <= 40 and > 40.
     """
     response_threshold = 40
     response_label = r"$R_{\mathrm{clus}}^{\mathrm{EM}}$"
@@ -426,14 +493,15 @@ def plot_high_response():
         rf"{response_label} $\leq$ {response_threshold}",
         rf"{response_label} $>$ {response_threshold}",
     ]
-    colors = ["blue", "red"]
 
     for campaign in [20, 23]:
-        cluster_response = load_feature("cluster_response", campaign)
+        cluster_response = load_feature(
+            "cluster_response", campaign, subcampaign=subcampaign
+        )
 
         for feature_key, settings in plot_settings.items():
             feature_name = settings["feature"]
-            feature_data = load_feature(feature_name, campaign)
+            feature_data = load_feature(feature_name, campaign, subcampaign=subcampaign)
             nbins = settings["nbins"]
             start = settings["start"]
             stop = settings["stop"]
@@ -450,7 +518,7 @@ def plot_high_response():
                 plt.xlim([start, stop])
 
             # Overlay for response <= 40 and > 40
-            for (low, high), label, color in zip(categories, category_labels, colors):
+            for (low, high), label, linestyle in zip(categories, category_labels):
                 if low is None:
                     mask = cluster_response <= high
                 elif high is None:
@@ -466,7 +534,6 @@ def plot_high_response():
                     density=density,
                     histtype="step",
                     label=label,
-                    color=color,
                 )
 
             plt.xlabel(xlabel)
@@ -475,7 +542,7 @@ def plot_high_response():
             plt.tight_layout()
 
             save_plot(
-                save_dir=f"{campaign}/response_comparison",
+                save_dir=f"{campaign}{subcampaign}/response_comparison",
                 output_name=f"{feature_name}_high_response",
             )
             plt.close()
@@ -488,60 +555,70 @@ def save_plot(save_dir, output_name):
     save_path = os.path.join(output_path, save_dir)
     ensure_dir_exists(save_path)
     plt.savefig(os.path.join(save_path, output_name) + ".pdf")
-    plt.close()
 
 
 # ---------- Main Function ---------- #
 def main():
-    if args.avgMu:
-        feature = "avgMu"
-        for campaign in [20, 23]:
-            plot_feature(
-                feature=feature,
-                campaign=campaign,
-                nbins=40,
-                start=0,
-                stop=100,
-                xlabel=r"$\langle \mu \rangle$",
-                ylabel="Number of topoclusters",
-            )
-            save_plot(save_dir=f"{campaign}", output_name=f"{feature}_{campaign}")
+    subcampaigns = ["a", "d", "e"]
 
-    if args.NPV:
-        feature = "nPrimVtx"
-        for campaign in [20, 23]:
-            plot_feature(
-                feature=feature,
-                campaign=campaign,
-                nbins=50,
-                start=0,
-                stop=50,
-                xlabel=r"$n_{\mathrm{PV}}$",
-                ylabel="Number of topoclusters",
-            )
-            save_plot(save_dir=f"{campaign}", output_name=f"{feature}_{campaign}")
+    for sub in subcampaigns:
+        if args.avgMu or args.all:
+            feature = "avgMu"
+            for campaign in [20, 23]:
+                plot_feature(
+                    feature=feature,
+                    campaign=campaign,
+                    subcampaign=sub,
+                    nbins=40,
+                    start=0,
+                    stop=100,
+                    xlabel=r"$\langle \mu \rangle$",
+                    ylabel="Number of topoclusters",
+                )
+                save_plot(
+                    save_dir=f"{campaign}{sub}/summary",
+                    output_name=feature,
+                )
 
-    if args.run_comparison:
-        plot_run_comparison(plot_settings)
+        if args.NPV or args.all:
+            feature = "nPrimVtx"
+            for campaign in [20, 23]:
+                plot_feature(
+                    feature=feature,
+                    campaign=campaign,
+                    subcampaign=sub,
+                    nbins=50,
+                    start=0,
+                    stop=50,
+                    xlabel=r"$n_{\mathrm{PV}}$",
+                    ylabel="Number of topoclusters",
+                )
+                save_plot(
+                    save_dir=f"{campaign}{sub}/summary",
+                    output_name=feature,
+                )
 
-    if args.NPV_comparison:
-        plot_features_overlayed_by_nPV_bins()
+        if args.run_comparison or args.all:
+            plot_run_comparison(plot_settings, sub)
 
-    if args.high_response:
-        plot_high_response()
+        if args.NPV_comparison or args.all:
+            plot_features_overlayed_by_nPV_bins(sub)
 
-    if args.response:
-        for campaign in [20, 23]:
-            plot_response(campaign)
+        if args.high_response or args.all:
+            plot_high_response(sub)
 
-    if args.response_noPU_vs_PU:
-        for campaign in [20, 23]:
-            plot_response_with_and_with_out_PU(campaign)
+        if args.response or args.all:
+            for campaign in [20, 23]:
+                plot_response(campaign, sub)
 
-    if args.PU_response:
-        for campaign in [20, 23]:
-            for energy in ["all", "<100~GeV", ">=100~GeV"]:
-                plot_mean_meadian_response(campaign, energy)
+        if args.response_noPU_vs_PU or args.all:
+            for campaign in [20, 23]:
+                plot_response_with_and_with_out_PU(campaign, sub)
+
+        if args.PU_response or args.all:
+            for campaign in [20, 23]:
+                for energy in ["all", "<100~GeV", ">=100~GeV"]:
+                    plot_mean_median_response(campaign, sub, energy)
 
 
 if __name__ == "__main__":
