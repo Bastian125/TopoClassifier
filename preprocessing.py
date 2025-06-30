@@ -49,6 +49,11 @@ parser.add_argument(
     help="Skip normalisation and time transformation.",
 )
 parser.add_argument(
+    "--prepare_graphs",
+    action="store_true",
+    help="Prepare HDF5 files for graph building.",
+)
+parser.add_argument(
     "--build_graphs",
     action="store_true",
     help="Build and save PyG graphs from normalized HDF5 splits.",
@@ -391,7 +396,7 @@ def build_graphs(
 
 def build_and_save_jetwise_graphs(tag, feature_keys):
     for split in ["train", "val", "test"]:
-        h5_path = os.path.join(save_path, f"{tag}_norm_{split}.h5")
+        h5_path = os.path.join(save_path, f"{tag}_graphs_{split}.h5")
         output_path = os.path.join(save_path, f"{tag}_graphs_{split}.pt")
 
         print(f"\n[INFO] Processing split: {split.upper()}")
@@ -408,10 +413,114 @@ def build_and_save_jetwise_graphs(tag, feature_keys):
         print(f"Saved graphs to: {output_path}")
 
 
+def stratified_jetwise_split(df, train_frac=0.6, val_frac=0.2, test_frac=0.2):
+    assert (
+        abs(train_frac + val_frac + test_frac - 1.0) < 1e-5
+    ), "Fractions must sum to 1."
+
+    # Group jets by (eventNumber, jetCnt)
+    df_all = pd.DataFrame(df)
+    df_all["jet_id"] = list(zip(df_all["eventNumber"], df_all["jetCnt"]))
+
+    # Assign one label per jet via majority vote
+    jet_labels = df_all.groupby("jet_id")["label"].mean().round().astype(int)
+
+    jet_ids = np.array(jet_labels.index.tolist())
+    jet_y = jet_labels.values
+
+    # Stratified jet-level splitting
+    jet_ids_trainval, jet_ids_test = train_test_split(
+        jet_ids, stratify=jet_y, test_size=test_frac, random_state=42
+    )
+    jet_labels_trainval = jet_labels.loc[list(map(tuple, jet_ids_trainval))]
+    jet_ids_train, jet_ids_val = train_test_split(
+        jet_ids_trainval,
+        stratify=jet_labels_trainval,
+        test_size=val_frac / (train_frac + val_frac),
+        random_state=42,
+    )
+
+    # Build boolean masks for each jet set
+    def mask_from_jet_ids(jet_ids_set):
+        jet_set = set(map(tuple, jet_ids_set))
+        return np.array([tuple(ev_jet) in jet_set for ev_jet in df_all["jet_id"]])
+
+    train_mask = mask_from_jet_ids(jet_ids_train)
+    val_mask = mask_from_jet_ids(jet_ids_val)
+    test_mask = mask_from_jet_ids(jet_ids_test)
+
+    df_train = {k: v[train_mask] for k, v in df.items()}
+    df_val = {k: v[val_mask] for k, v in df.items()}
+    df_test = {k: v[test_mask] for k, v in df.items()}
+
+    return df_train, df_val, df_test
+
+
+def process_campaign(tag):
+    print(f"[INFO] Preparing graph-ready HDF5 for {tag}")
+    df_withpu = load_and_process(
+        os.path.join(root_path, f"{tag}_withPU.root"),
+        label=0,
+        apply_norm=True,
+    )
+    df_nopu = load_and_process(
+        os.path.join(root_path, f"{tag}_noPU.root"),
+        label=1,
+        apply_norm=True,
+    )
+    combined = {
+        key: np.concatenate([df_withpu[key], df_nopu[key]]) for key in df_withpu.keys()
+    }
+
+    # Sort by eventNumber and jetCnt
+    sort_index = np.lexsort((combined["jetCnt"], combined["eventNumber"]))
+    for key in combined:
+        combined[key] = combined[key][sort_index]
+
+    # Stratified jet-wise split
+    train, val, test = stratified_jetwise_split(combined)
+
+    # Compute class weights
+    class_weights = compute_class_weight(
+        class_weight="balanced", classes=np.array([0, 1]), y=train["label"]
+    )
+    pos_weight = class_weights[1] / class_weights[0]
+
+    normalize_data(train, val, test, tag)
+
+    compute_jet_features(train)
+    compute_jet_features(val)
+    compute_jet_features(test)
+
+    save_split(train, tag, "graph_train", pos_weight=pos_weight)
+    save_split(val, tag, "graph_val", pos_weight=pos_weight)
+    save_split(test, tag, "graph_test", pos_weight=pos_weight)
+
+
 # ---------- Main ---------- #
 def main():
     if args.print_features:
         list_root_features(os.path.join(root_path, "mc20a_withPU.root"))
+        return
+
+    if args.prepare_graphs:
+        if args.campaign:
+            tag = args.campaign
+            if tag in ["mc20", "mc23"]:
+                sub_tags = {
+                    "mc20": ["mc20a", "mc20d", "mc20e"],
+                    "mc23": ["mc23a", "mc23d", "mc23e"],
+                }[tag]
+                for sub_tag in sub_tags:
+                    process_campaign(sub_tag)
+            else:
+                process_campaign(tag)
+        elif args.full:
+            tags = ["mc20a", "mc20d", "mc20e", "mc23a", "mc23d", "mc23e"]
+            for tag in tags:
+                process_campaign(tag)
+        else:
+            print("Error: --prepare_graphs requires --campaign or --full")
         return
 
     if args.build_graphs:
