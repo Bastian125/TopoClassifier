@@ -270,7 +270,6 @@ def plot_response_with_and_with_out_PU(campaign, subcampaign):
         bins=nbins,
         range=hrange,
         histtype="step",
-        linestyle=(0, (5, 10)),
         density=True,
         label="No pile-up",
     )
@@ -452,7 +451,7 @@ def plot_features_overlayed_by_nPV_bins(subcampaign):
                 bins = nbins
                 plt.xlim([start, stop])
 
-            for (low, high), label, linestyle in zip(nPV_bins, nPV_labels):
+            for (low, high), label in zip(nPV_bins, nPV_labels):
                 if low is None:
                     mask = n_PV < high
                 elif high is None:
@@ -518,7 +517,7 @@ def plot_high_response(subcampaign):
                 plt.xlim([start, stop])
 
             # Overlay for response <= 40 and > 40
-            for (low, high), label, linestyle in zip(categories, category_labels):
+            for (low, high), label in zip(categories, category_labels):
                 if low is None:
                     mask = cluster_response <= high
                 elif high is None:
