@@ -25,6 +25,7 @@ from config import (
     normal_features,
     data_root_path as root_path,
     data_save_path as save_path,
+    jet_feature_keys as node_features
 )
 
 # ---------- Argument Parser ---------- #
@@ -395,8 +396,8 @@ def build_graphs(
 
 def build_and_save_jetwise_graphs(tag, feature_keys):
     for split in ["train", "val", "test"]:
-        h5_path = os.path.join(save_path, f"{tag}_graphs_{split}.h5")
-        output_path = os.path.join(save_path, f"{tag}_graphs_{split}.pt")
+        h5_path = os.path.join(save_path, f"{tag}_graph_{split}.h5")
+        output_path = os.path.join(save_path, f"{tag}_graph_{split}.pt")
 
         print(f"\n[INFO] Processing split: {split.upper()}")
         if not os.path.exists(h5_path):
