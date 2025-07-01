@@ -19,7 +19,7 @@ from torch.amp import GradScaler, autocast
 from torch_geometric.loader import DataLoader as GeoDataLoader
 from tqdm import tqdm
 
-from config import data_save_path, output_path
+from config import data_save_path, output_path, feature_keys, jet_feature_keys
 from io_utils import ensure_dir_exists
 from dataloader import HDF5Dataset, JetGraphIterableDataset
 from models import DNNModel, GAT
@@ -34,51 +34,13 @@ from evaluate import (
 
 
 # ---------- File Config ---------- #
-feature_keys = [
-    "clusterE",
-    "cluster_FIRST_ENG_DENS",
-    "cluster_EM_PROBABILITY",
-    "cluster_CENTER_LAMBDA",
-    "cluster_CENTER_MAG",
-    "cluster_nCells_tot",
-    "cluster_ENG_FRAC_EM",
-    "cluster_SECOND_TIME",
-    "cluster_AVG_TILE_Q",
-    "cluster_AVG_LAR_Q",
-    "cluster_SECOND_R",
-    "cluster_LATERAL",
-    "cluster_time",
-    "cluster_ISOLATION",
-]
-
-jet_feature_keys = [
-    "clusterE",
-    "cluster_FIRST_ENG_DENS",
-    "cluster_EM_PROBABILITY",
-    "cluster_CENTER_LAMBDA",
-    "cluster_CENTER_MAG",
-    "cluster_nCells_tot",
-    "cluster_ENG_FRAC_EM",
-    "cluster_SECOND_TIME",
-    "cluster_AVG_TILE_Q",
-    "cluster_AVG_LAR_Q",
-    "cluster_SECOND_R",
-    "cluster_LATERAL",
-    "cluster_time",
-    "cluster_ISOLATION",
-    "jetRawE",
-    "diffEta",
-    "zT",
-    "zL",
-    "zRel",
-]
-
 LEARNING_RATE_RUN2 = 1e-3
 LEARNING_RATE_RUN3 = 1e-5
 BATCH_SIZE_RUN2 = 512
 BATCH_SIZE_RUN3 = 1024
 EPOCHS = 400
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 # ---------- Argument Parser ---------- #
 parser = argparse.ArgumentParser(
@@ -281,7 +243,7 @@ def train_GNN(train_dataset, val_dataset, input_dim, output_dir, model_str):
     """Train GAT model with early stopping and save results like the DNN block."""
     train_loader = GeoDataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=4)
     val_loader = GeoDataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=4)
-
+# ---------- Paths ---------- #
     model = GAT(input_dim).to(DEVICE)
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
@@ -360,7 +322,7 @@ def train_GNN(train_dataset, val_dataset, input_dim, output_dir, model_str):
     plot_training_history(history)
     return model, history
 
-
+# ---------- Paths ---------- #
 def get_predictions(model, loader):
     """Run inference and return true and predicted probabilities."""
     model.eval()
@@ -509,10 +471,10 @@ def main():
 
         if model_str == "GAT":
             train_pattern = os.path.join(
-                data_save_path, f"{args.train_campaign}_graphs_train_chunk*.pt"
+                data_save_path, f"{args.train_campaign}_graph_train_chunk*.pt"
             )
             val_pattern = os.path.join(
-                data_save_path, f"{args.train_campaign}_graphs_val_chunk*.pt"
+                data_save_path, f"{args.train_campaign}_graph_val_chunk*.pt"
             )
 
             train_dataset = JetGraphIterableDataset(train_pattern)
