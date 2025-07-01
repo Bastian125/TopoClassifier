@@ -2,6 +2,9 @@
 Global config for all scripts.
 """
 
+# ---------- Imports ---------- #
+import matplotlib as plt
+
 # ---------- Paths ---------- #
 """Define paths for orignal data, preprocessed data, and output path for plots."""
 
@@ -115,8 +118,72 @@ cluster_features = [
     "cluster_SIGNIFICANCE",
 ]
 
+feature_keys = [
+    "clusterE",
+    "cluster_FIRST_ENG_DENS",
+    "cluster_EM_PROBABILITY",
+    "cluster_CENTER_LAMBDA",
+    "cluster_CENTER_MAG",
+    "cluster_nCells_tot",
+    "cluster_ENG_FRAC_EM",
+    "cluster_SECOND_TIME",
+    "cluster_AVG_TILE_Q",
+    "cluster_AVG_LAR_Q",
+    "cluster_SECOND_R",
+    "cluster_LATERAL",
+    "cluster_time",
+    "cluster_ISOLATION",
+]
+
+jet_feature_keys = [
+    "clusterE",
+    "cluster_FIRST_ENG_DENS",
+    "cluster_EM_PROBABILITY",
+    "cluster_CENTER_LAMBDA",
+    "cluster_CENTER_MAG",
+    "cluster_nCells_tot",
+    "cluster_ENG_FRAC_EM",
+    "cluster_SECOND_TIME",
+    "cluster_AVG_TILE_Q",
+    "cluster_AVG_LAR_Q",
+    "cluster_SECOND_R",
+    "cluster_LATERAL",
+    "cluster_time",
+    "cluster_ISOLATION",
+    "jetRawE",
+    "diffEta",
+    "zT",
+    "zL",
+    "zRel",
+]
+
 
 # ---------- Plot Configuration ---------- #
+def set_style():
+    plt.rcParams.update(
+        {
+            "axes.prop_cycle": plt.cycler(
+                color=[
+                    "#0072B2",  # Blue
+                    "#D55E00",  # Vermilion
+                    "#009E73",  # Bluish green
+                    "#E69F00",  # Orange
+                    "#56B4E9",  # Sky blue
+                    "#F0E442",  # Yellow
+                    "#CC79A7",  # Reddish purple
+                    "#000000",  # Black
+                ]
+            ),
+            "lines.linewidth": 1.8,
+            "lines.markersize": 5,
+            "legend.frameon": False,
+            "legend.fontsize": 11,
+            "font.size": 12,
+            "text.usetex": True,
+        }
+    )
+
+
 plot_settings = {
     "avgMu": {
         "feature": "avgMu",
