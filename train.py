@@ -160,9 +160,8 @@ def plot_training_history(history):
         arrowprops=dict(arrowstyle="->", lw=1.2),
         bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", alpha=0.8),
         fontsize=9,
-        ha="center"
+        ha="center",
     )
-
 
     # Bottom plot: Loss difference
     loss_diff = np.array(history["val_loss"]) - np.array(history["train_loss"])
@@ -241,9 +240,9 @@ def train_model(model, train_loader, val_loader, criterion, optimizer):
 
 def train_GNN(train_dataset, val_dataset, input_dim, output_dir, model_str):
     """Train GAT model with early stopping and save results like the DNN block."""
-    train_loader = GeoDataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=4)
-    val_loader = GeoDataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=4)
-# ---------- Paths ---------- #
+    train_loader = GeoDataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=2)
+    val_loader = GeoDataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=2)
+
     model = GAT(input_dim).to(DEVICE)
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
@@ -322,7 +321,7 @@ def train_GNN(train_dataset, val_dataset, input_dim, output_dir, model_str):
     plot_training_history(history)
     return model, history
 
-# ---------- Paths ---------- #
+
 def get_predictions(model, loader):
     """Run inference and return true and predicted probabilities."""
     model.eval()
@@ -349,6 +348,87 @@ def get_predictions_GNN(model, loader):
             y_true.extend(batch.y.cpu().numpy())
             y_pred.extend(outputs)
     return np.array(y_true), np.array(y_pred)
+
+
+def test_gnn_model(
+    model_class,
+    dataset_pattern,
+    model_path,
+    test_output_dir,
+    test_campaign,
+    feature_importance=False,
+):
+    """
+    Evaluate a GNN model (e.g. GAT) using an IterableDataset.
+
+    Args:
+        model_class (nn.Module): The GNN model class (e.g., GAT).
+        dataset_pattern (str): Glob pattern for loading *.pt test chunks.
+        model_path (str): Path to saved model weights (.pt).
+        test_output_dir (str): Output dir for plots and predictions.
+        test_campaign (str): Campaign name (e.g., mc23e).
+        feature_importance (bool): Currently unused for GNN, but supported.
+    """
+    # Load dataset and get input dimension via peek
+    test_dataset = JetGraphIterableDataset(dataset_pattern)
+    peek_loader = GeoDataLoader(test_dataset, batch_size=BATCH_SIZE)
+    first_batch = next(iter(peek_loader))
+    input_dim = first_batch.x.shape[1]
+
+    # Reset loader for full inference
+    test_loader = GeoDataLoader(JetGraphIterableDataset(dataset_pattern), batch_size=BATCH_SIZE)
+
+    # Load model
+    model = model_class(input_dim).to(DEVICE)
+    model.load_state_dict(torch.load(model_path))
+
+    # Predict
+    y_true, y_pred = get_predictions_GNN(model, test_loader)
+
+    # Save predictions
+    pred_file = os.path.join(
+        test_output_dir, f"GAT_on_{test_campaign}_predictions.h5"
+    )
+    with h5py.File(pred_file, "w") as f:
+        f.create_dataset("y_true", data=y_true)
+        f.create_dataset("y_pred", data=y_pred)
+
+    # Plotting
+    roc_prefix = os.path.join(test_output_dir, f"GAT_on_{test_campaign}")
+    plot_roc_curve(y_true, y_pred, prefix_path=roc_prefix)
+    plot_precision_recall(y_true, y_pred, prefix_path=roc_prefix)
+    plot_prediction_histogram(y_true, y_pred, prefix_path=roc_prefix)
+
+    # Warn if feature importance requested
+    if feature_importance:
+        print("⚠ Feature importance not implemented for GNN models.")
+
+    # Cluster response
+    threshold_txt = roc_prefix + "_threshold.txt"
+    if os.path.exists(threshold_txt):
+        with open(threshold_txt) as f:
+            for line in f:
+                if line.startswith("Best threshold:"):
+                    threshold = float(line.split(":")[1].strip())
+                    break
+                else:
+                    threshold = 0.5
+                    print("Warning: Threshold not found, defaulting to 0.5")
+    else:
+        threshold = 0.5
+        print("Warning: Threshold file missing, defaulting to 0.5")
+
+    # Load cluster response
+    h5_test_file = os.path.join(data_save_path, f"{test_campaign}_norm_test.h5")
+    with h5py.File(h5_test_file, "r") as f:
+        cluster_response = f["cluster_response"][:]
+
+    plot_cluster_response_comparison_histogram(
+        true_response=cluster_response,
+        y_pred_probs=y_pred,
+        prefix_path=roc_prefix,
+        threshold=threshold,
+    )
 
 
 # ---------- Main ---------- #
@@ -508,82 +588,96 @@ def main():
             args.test_campaign,
         )
 
-        if model_str == "DNN":
-            model_cls = DNNModel
-            model = model_cls(len(feature_keys)).to(DEVICE)
-        elif model_str == "JetDNN":
-            model_cls = DNNModel
-            model = model_cls(len(jet_feature_keys)).to(DEVICE)
+        if model_str == "DNN" or model_str == "JetDNN":
+            if model_str == "DNN":
+                model_cls = DNNModel
+                model = model_cls(len(feature_keys)).to(DEVICE)
+            elif model_str == "JetDNN":
+                model_cls = DNNModel
+                model = model_cls(len(jet_feature_keys)).to(DEVICE)
 
-        state_dict = torch.load(os.path.join(output_dir, f"{model_str}_best.pt"))
-        state_dict = remove_prefix_from_state_dict(state_dict)
-        model.load_state_dict(state_dict)
+            state_dict = torch.load(os.path.join(output_dir, f"{model_str}_best.pt"))
+            state_dict = remove_prefix_from_state_dict(state_dict)
+            model.load_state_dict(state_dict)
 
-        test_file = os.path.join(data_save_path, f"{args.test_campaign}_norm_test.h5")
-        if model_str == "DNN":
-            test_dataset = HDF5Dataset(test_file, feature_keys, "label")
-        elif model_str == "JetDNN":
-            test_dataset = HDF5Dataset(test_file, jet_feature_keys, "label")
-        test_loader = DataLoader(
-            test_dataset,
-            batch_size=BATCH_SIZE,
-            shuffle=False,
-            num_workers=4,
-            pin_memory=True,
-        )
-
-        y_true, y_pred = get_predictions(model, test_loader)
-
-        with h5py.File(
-            os.path.join(
-                test_out_dir, f"{model_str}_on_{args.test_campaign}_predictions.h5"
-            ),
-            "w",
-        ) as f:
-            f.create_dataset("y_true", data=y_true)
-            f.create_dataset("y_pred", data=y_pred)
-
-        roc_prefix_test = os.path.join(
-            test_out_dir, f"{model_str}_on_{args.test_campaign}"
-        )
-        # Start plotting
-        plot_roc_curve(y_true, y_pred, prefix_path=roc_prefix_test)
-        plot_precision_recall(y_true, y_pred, prefix_path=roc_prefix_test)
-        plot_prediction_histogram(y_true, y_pred, prefix_path=roc_prefix_test)
-        if args.feature_importance:
-            plot_permutation_importance(
-                model=model,
-                dataset=test_dataset,
-                feature_names=feature_keys,
-                prefix_path=roc_prefix_test,
+            test_file = os.path.join(
+                data_save_path, f"{args.test_campaign}_norm_test.h5"
+            )
+            if model_str == "DNN":
+                test_dataset = HDF5Dataset(test_file, feature_keys, "label")
+            elif model_str == "JetDNN":
+                test_dataset = HDF5Dataset(test_file, jet_feature_keys, "label")
+            test_loader = DataLoader(
+                test_dataset,
+                batch_size=BATCH_SIZE,
+                shuffle=False,
+                num_workers=4,
+                pin_memory=True,
             )
 
-        # Load from threshold TXT
-        with open(roc_prefix_test + "_threshold.txt") as f:
-            for line in f:
-                if line.startswith("Best threshold:"):
-                    best_threshold = float(line.split(":")[1].strip())
+            y_true, y_pred = get_predictions(model, test_loader)
 
-        with h5py.File(test_file, "r") as f:
-            cluster_response = f["cluster_response"][:]
+            with h5py.File(
+                os.path.join(
+                    test_out_dir, f"{model_str}_on_{args.test_campaign}_predictions.h5"
+                ),
+                "w",
+            ) as f:
+                f.create_dataset("y_true", data=y_true)
+                f.create_dataset("y_pred", data=y_pred)
 
-        plot_cluster_response_comparison_histogram(
-            true_response=cluster_response,
-            y_pred_probs=y_pred,
-            prefix_path=roc_prefix_test,
-            threshold=best_threshold,
-        )
+            roc_prefix_test = os.path.join(
+                test_out_dir, f"{model_str}_on_{args.test_campaign}"
+            )
+            # Start plotting
+            plot_roc_curve(y_true, y_pred, prefix_path=roc_prefix_test)
+            plot_precision_recall(y_true, y_pred, prefix_path=roc_prefix_test)
+            plot_prediction_histogram(y_true, y_pred, prefix_path=roc_prefix_test)
 
-    if args.plot:
-        history_path = os.path.join(output_dir, f"{model_str}_history.h5")
-        if not os.path.exists(history_path):
-            print(f"Error: No training history found at {history_path}")
-        else:
-            print(f"Loading training history from {history_path}")
-            with h5py.File(history_path, "r") as f:
-                history = {k: f[k][()] for k in f}
-            history = {k: v.tolist() for k, v in history.items()}
-            plot_training_history(history)
+            if args.feature_importance and model_str == "DNN":
+                plot_permutation_importance(
+                    model=model,
+                    dataset=test_dataset,
+                    feature_names=feature_keys,
+                    prefix_path=roc_prefix_test,
+                )
+            elif args.feature_importance and model_str == "JetDNN":
+                plot_permutation_importance(
+                    model=model,
+                    dataset=test_dataset,
+                    feature_names=jet_feature_keys,
+                    prefix_path=roc_prefix_test,
+                )
+
+            # Load from threshold TXT
+            with open(roc_prefix_test + "_threshold.txt") as f:
+                for line in f:
+                    if line.startswith("Best threshold:"):
+                        best_threshold = float(line.split(":")[1].strip())
+
+            with h5py.File(test_file, "r") as f:
+                cluster_response = f["cluster_response"][:]
+
+            plot_cluster_response_comparison_histogram(
+                true_response=cluster_response,
+                y_pred_probs=y_pred,
+                prefix_path=roc_prefix_test,
+                threshold=best_threshold,
+            )
+
+        elif model_str == "GAT":
+            test_pattern = os.path.join(
+                data_save_path, f"{args.test_campaign}_graph_test_chunk*.pt"
+            )
+            model_path = os.path.join(output_dir, f"{model_str}_best.pt")
+            test_gnn_model(
+                model_class=GAT,
+                dataset_pattern=test_pattern,
+                model_path=model_path,
+                test_output_dir=test_out_dir,
+                test_campaign=args.test_campaign,
+                feature_importance=args.feature_importance,
+            )
 
 
 if __name__ == "__main__":
