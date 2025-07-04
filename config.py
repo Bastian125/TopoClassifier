@@ -208,7 +208,7 @@ plot_settings = {
         "nbins": 50,
         "start": 1e-1,
         "stop": 1e2,
-        "xlabel": r"$E_{\mathrm{clus}}^{\mathrm{EM}}$",
+        "xlabel": r"$E_{\mathrm{clus}}^{\mathrm{EM}} [\mathrm{GeV}]$",
         "log": True,
     },
     "cluster_FIRST_ENG_DENS": {
@@ -216,7 +216,7 @@ plot_settings = {
         "nbins": 100,
         "start": 1e-10,
         "stop": 1e-4,
-        "xlabel": r"$\langle \rho_{\mathrm{cell}} \rangle$",
+        "xlabel": r"$\langle \rho_{\mathrm{cell}} \rangle [\mathrm{GeV}/\mathrm{mm}^{3}]$",
         "log": True,
     },
     "cluster_EM_PROBABILITY": {
@@ -231,7 +231,7 @@ plot_settings = {
         "nbins": 50,
         "start": 1e0,
         "stop": 1e4,
-        "xlabel": r"$\lambda_{\mathrm{clus}}$",
+        "xlabel": r"$\lambda_{\mathrm{clus}} [\mathrm{mm}]$",
         "log": True,
     },
     "cluster_nCells_tot": {
@@ -247,7 +247,7 @@ plot_settings = {
         "nbins": 50,
         "start": 1000,
         "stop": 7000,
-        "xlabel": r"$c$",
+        "xlabel": r"$c [\mathrm{mm}]$",
     },
     "cluster_ENG_FRAC_EM": {
         "feature": "cluster_ENG_FRAC_EM",
@@ -261,7 +261,7 @@ plot_settings = {
         "nbins": 50,
         "start": 1e-10,
         "stop": 1e-5,
-        "xlabel": r"$\sigma_{\mathrm{t}}^{2}$",
+        "xlabel": r"$\sigma_{\mathrm{t}}^{2} [\mathrm{ns}^2]$",
         "log": True,
     },
     "cluster_AVG_TILE_Q": {
@@ -269,7 +269,7 @@ plot_settings = {
         "nbins": 50,
         "start": 0,
         "stop": 100,
-        "xlabel": r"$\langle Q_{\mathrm{Tile}} \rangle$",
+        "xlabel": r"$\langle Q_{\mathrm{Tile}} \rangle [$ADC counts$]$",
         "log": False,
     },
     "cluster_AVG_LAR_Q": {
@@ -277,7 +277,7 @@ plot_settings = {
         "nbins": 1000,
         "start": 0,
         "stop": 4000,
-        "xlabel": r"$\langle Q_{\mathrm{LAr}} \rangle$",
+        "xlabel": r"$\langle Q_{\mathrm{LAr}} \rangle [$ADC counts$]$",
         "log": False,
     },
     "cluster_SECOND_R": {
@@ -285,7 +285,7 @@ plot_settings = {
         "nbins": 50,
         "start": 1e-6,
         "stop": 1e-3,
-        "xlabel": r"$\langle r_{\mathrm{cell}}^{2} \rangle$",
+        "xlabel": r"$\langle r_{\mathrm{cell}}^{2} \rangle [\mathrm{mm}^2]$",
         "log": True,
     },
     "cluster_LATERAL": {
@@ -300,7 +300,7 @@ plot_settings = {
         "nbins": 100,
         "start": -50,
         "stop": 50,
-        "xlabel": r"$t_{\mathrm{clus}}$",
+        "xlabel": r"$t_{\mathrm{clus}} [\mathrm{ns}]$",
     },
     "cluster_ISOLATION": {
         "feature": "cluster_ISOLATION",
@@ -314,14 +314,14 @@ plot_settings = {
         "nbins": 50,
         "start": 0,
         "stop": 1,
-        "xlabel": r"$\Delta \alpha$",
+        "xlabel": r"$\Delta \alpha [\mathrm{rad}]$",
     },
     "cluster_DELTA_THETA": {
         "feature": "cluster_DELTA_THETA",
         "nbins": 50,
         "start": -1,
         "stop": 1,
-        "xlabel": r"$\Delta \theta$",
+        "xlabel": r"$\Delta \theta [\mathrm{rad}]$",
     },
     "clusterEta": {
         "feature": "clusterEta",
@@ -342,7 +342,7 @@ plot_settings = {
         "nbins": 50,
         "start": 1,
         "stop": 1e6,
-        "xlabel": r"$\langle \lambda_{\mathrm{cell}}^{2} \rangle$",
+        "xlabel": r"$\langle \lambda_{\mathrm{cell}}^{2} \rangle [\mathrm{mm}^2]$",
         "log": True,
     },
     "cluster_LONGITUDINAL": {

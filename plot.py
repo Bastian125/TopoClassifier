@@ -136,7 +136,7 @@ def plot_feature(
     stop,
     log=False,
     xlabel=None,
-    ylabel="Relative number of clusters",
+    ylabel="Normalised",
     density=True,
 ):
     """
@@ -160,6 +160,8 @@ def plot_feature(
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.tight_layout()
+    save_plot(f"{campaign}{subcampaign}/features", f"{feature}")
+    plt.close()
 
 
 def plot_response(campaign, subcampaign):
@@ -209,7 +211,7 @@ def plot_response(campaign, subcampaign):
     )
     plt.yscale("log")
     plt.xlabel(r"Response")
-    plt.ylabel(r"Relative number of clusters")
+    plt.ylabel(r"Normalised")
     plt.xlim(lim)
     plt.legend()
     plt.tight_layout()
@@ -275,7 +277,7 @@ def plot_response_with_and_with_out_PU(campaign, subcampaign):
     )
     plt.yscale("log")
     plt.xlabel(r"Response")
-    plt.ylabel(r"Number of clusters")
+    plt.ylabel(r"Normalised")
     plt.xlim(lim)
     plt.legend()
     plt.tight_layout()
@@ -373,7 +375,7 @@ def plot_run_comparison(features, subcampaign):
         stop = settings["stop"]
         log = settings.get("log", False)
         xlabel = settings.get("xlabel", feature)
-        ylabel = settings.get("ylabel", "Relative number of clusters")
+        ylabel = settings.get("ylabel", "Normalised")
         density = settings.get("density", True)
 
         print(f"Comparing feature '{feature}' between MC20e and MC23e...")
@@ -441,7 +443,7 @@ def plot_features_overlayed_by_nPV_bins(subcampaign):
             stop = settings["stop"]
             log = settings.get("log", False)
             xlabel = settings.get("xlabel", feature_name)
-            ylabel = settings.get("ylabel", "Relative number of clusters")
+            ylabel = settings.get("ylabel", "Normalised")
             density = settings.get("density", True)
 
             if log:
@@ -506,7 +508,7 @@ def plot_high_response(subcampaign):
             stop = settings["stop"]
             log = settings.get("log", False)
             xlabel = settings.get("xlabel", feature_name)
-            ylabel = settings.get("ylabel", "Relative number of clusters")
+            ylabel = settings.get("ylabel", "Normalised")
             density = settings.get("density", True)
 
             if log:
@@ -547,6 +549,37 @@ def plot_high_response(subcampaign):
             plt.close()
 
 
+def plot_all_features(subcampaign):
+    """
+    Plot every feature in plot_settings for both MC20 and MC23 campaigns.
+    """
+    for campaign in [20, 23]:
+        for feature_key, settings in plot_settings.items():
+            feature = settings["feature"]
+            nbins = settings["nbins"]
+            start = settings["start"]
+            stop = settings["stop"]
+            log = settings.get("log", False)
+            xlabel = settings.get("xlabel", feature)
+            ylabel = settings.get("ylabel", "Normalised")
+            density = settings.get("density", True)
+
+            print(f"Plotting {feature} for MC{campaign}{subcampaign}...")
+
+            plot_feature(
+                feature=feature,
+                campaign=campaign,
+                subcampaign=subcampaign,
+                nbins=nbins,
+                start=start,
+                stop=stop,
+                log=log,
+                xlabel=xlabel,
+                ylabel=ylabel,
+                density=density,
+            )
+
+
 def save_plot(save_dir, output_name):
     """
     Saves plot to given save directory and output name.
@@ -561,6 +594,9 @@ def main():
     subcampaigns = ["a", "d", "e"]
 
     for sub in subcampaigns:
+        if args.all:
+            plot_all_features(sub)
+
         if args.avgMu or args.all:
             feature = "avgMu"
             for campaign in [20, 23]:
