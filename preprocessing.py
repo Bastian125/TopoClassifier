@@ -13,6 +13,7 @@ from datetime import datetime
 from tqdm import tqdm
 import psutil
 import glob
+import gc
 
 from sklearn.model_selection import train_test_split
 from sklearn.utils.class_weight import compute_class_weight
@@ -25,7 +26,7 @@ from config import (
     normal_features,
     data_root_path as root_path,
     data_save_path as save_path,
-    jet_feature_keys as node_features
+    jet_feature_keys as node_features,
 )
 
 # ---------- Argument Parser ---------- #
@@ -472,6 +473,9 @@ def process_campaign(tag):
         key: np.concatenate([df_withpu[key], df_nopu[key]]) for key in df_withpu.keys()
     }
 
+    del df_withpu, df_nopu
+    gc.collect()
+
     # Sort by eventNumber and jetCnt
     sort_index = np.lexsort((combined["jetCnt"], combined["eventNumber"]))
     for key in combined:
@@ -479,6 +483,9 @@ def process_campaign(tag):
 
     # Stratified jet-wise split
     train, val, test = stratified_jetwise_split(combined)
+
+    del combined
+    gc.collect()
 
     # Compute class weights
     class_weights = compute_class_weight(
