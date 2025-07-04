@@ -406,7 +406,7 @@ def build_and_save_jetwise_graphs(tag, feature_keys):
 
         print_memory()
 
-        build_graphs(h5_path, feature_keys, output_path, chunk_size=1000000)
+        build_graphs(h5_path, feature_keys, output_path, chunk_size=100000)
 
         print_memory()
 
