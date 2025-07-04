@@ -305,7 +305,7 @@ def train_GNN(train_dataset, val_dataset, input_dim, output_dir, model_str):
             wait = 0
         else:
             wait += 1
-            if epoch >= 100 and wait >= 20:
+            if wait >= 5:
                 print("Early stopping triggered.")
                 break
 
