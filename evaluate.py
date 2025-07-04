@@ -15,6 +15,8 @@ from sklearn.metrics import (
     average_precision_score,
 )
 
+from config import set_style
+
 
 # ---------- Helper Functions ---------- #
 def remove_prefix_from_state_dict(state_dict, prefix="_orig_mod."):
@@ -31,6 +33,7 @@ def plot_roc_curve(y_true, y_pred, prefix_path):
     Plot and save ROC curve with best threshold using Youden's J statistic.
     Saves both PDF and TXT file with threshold and metrics.
     """
+    set_style()
     fpr, tpr, thresholds = roc_curve(y_true, y_pred)
     roc_auc = auc(fpr, tpr)
 
@@ -43,19 +46,19 @@ def plot_roc_curve(y_true, y_pred, prefix_path):
 
     # Plot ROC curve
     plt.figure(figsize=(8, 6))
-    plt.plot(fpr, tpr, label=f"ROC curve (AUC = {roc_auc:.4f})", linewidth=2)
+    plt.plot(fpr, tpr, label=f"ROC curve (AUC = {roc_auc:.2f})", linewidth=2)
     plt.plot([0, 1], [0, 1], "k--", label="Random Classifier")
     plt.scatter(
         best_fpr,
         best_tpr,
         color="red",
         zorder=5,
-        label=f"Best threshold = {best_threshold:.4f}",
+        label=f"Best threshold = {best_threshold:.2f}",
     )
     plt.text(
         best_fpr + 0.02,
         best_tpr - 0.05,
-        f"Thresh = {best_threshold:.4f}\nTPR = {best_tpr:.3f}\nFPR = {best_fpr:.3f}",
+        rf"Thresh = {best_threshold:.2f}\\TPR = {best_tpr:.3f}\\FPR = {best_fpr:.3f}",
         fontsize=10,
         bbox=dict(
             boxstyle="round,pad=0.3", edgecolor="gray", facecolor="white", alpha=0.8
@@ -90,12 +93,13 @@ def plot_precision_recall(y_true, y_pred, prefix_path):
     Plot and save Precision-Recall (PR) curve with average precision.
     Saves both PDF and TXT file with summary.
     """
+    set_style()
     precision, recall, _ = precision_recall_curve(y_true, y_pred)
     avg_precision = average_precision_score(y_true, y_pred)
 
     plt.figure(figsize=(8, 6))
     plt.plot(
-        recall, precision, label=f"Avg Precision = {avg_precision:.4f}", linewidth=2
+        recall, precision, label=f"Avg Precision = {avg_precision:.2f}", linewidth=2
     )
     plt.xlabel("Recall")
     plt.ylabel("Precision")
@@ -123,6 +127,7 @@ def plot_prediction_histogram(y_true, y_pred, prefix_path):
     Plot a histogram of predicted probabilities for each class (label 0 and 1).
     Saves as a PDF file.
     """
+    set_style()
     y_true = np.array(y_true)
     y_pred = np.array(y_pred)
 
@@ -177,6 +182,7 @@ def plot_cluster_response_comparison_histogram(
         prefix_path (str): Output prefix for saving.
         threshold (float): Classification threshold.
     """
+    set_style()
     true_response = np.asarray(true_response)
     y_pred_probs = np.asarray(y_pred_probs)
 
@@ -218,7 +224,7 @@ def plot_cluster_response_comparison_histogram(
         range=hrange,
         histtype="step",
         density=True,
-        label=f"Selected (≥ {threshold:.2f})\nIQR = {iqr_selected:.2f}",
+        label=rf"Selected ($\geq$ {threshold:.2f})\\$\mathrm{{IQR}}$ = {iqr_selected:.2f}",
     )
 
     plt.yscale("log")
@@ -243,6 +249,8 @@ def plot_permutation_importance(
     """
     from sklearn.metrics import roc_auc_score
     from torch.utils.data import TensorDataset, DataLoader
+
+    set_style()
 
     device = torch.device(device)
     model = model.to(device)
