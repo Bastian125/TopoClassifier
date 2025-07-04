@@ -274,6 +274,9 @@ def save_split(df, base_name, tag, pos_weight=None):
             f.attrs["pos_weight"] = pos_weight
     print(f"Saved {tag} split to {output_path}")
 
+    del df
+    gc.collect()
+
 
 def load_multiple_campaigns(campaigns, apply_norm):
     """
@@ -408,6 +411,8 @@ def build_and_save_jetwise_graphs(tag, feature_keys):
         print_memory()
 
         build_graphs(h5_path, feature_keys, output_path, chunk_size=100000)
+
+        gc.collect()
 
         print_memory()
 
@@ -556,6 +561,9 @@ def main():
                 )
                 compute_jet_features(df)
                 save_split(df, tag, f"{label_name}_raw")
+
+                del df
+                gc.collect()
             return
 
         if tag in ["mc20", "mc23"]:
