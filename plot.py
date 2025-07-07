@@ -41,7 +41,9 @@ data_files_noPU = {
 
 
 # ---------- Argument Parser ---------- #
-parser = argparse.ArgumentParser(description="Plot cluster features for MC20e/MC23e.")
+parser = argparse.ArgumentParser(
+    description="Plot cluster features for MC20a/d/e and MC23a/d/e."
+)
 mode_group = parser.add_mutually_exclusive_group(required=True)
 mode_group.add_argument(
     "--avgMu",
@@ -343,6 +345,17 @@ def plot_mean_median_response(campaign, subcampaign, energy):
         median_uncertainty.append(sigma_median)
         n_PV_centers.append((n_PV_min + n_PV_max) / 2)
 
+
+    # Energy label for legend
+    if energy == "all":
+        energy_label = "All energies"
+    elif energy == "<100~GeV":
+        energy_label = r"$E_{\mathrm{clus}} < 100$ GeV"
+    elif energy == ">=100~GeV":
+        energy_label = r"$E_{\mathrm{clus}} \geq 100$ GeV"
+
+    # Dummy line for energy category
+    plt.plot([], [], " ", label=energy_label)
     plt.errorbar(
         n_PV_centers, mean_response, yerr=mean_uncertainty, fmt="o", label="Mean"
     )
@@ -352,7 +365,7 @@ def plot_mean_median_response(campaign, subcampaign, energy):
     plt.xlim(10, 45)
     plt.xlabel(r"$N_{\mathrm{PV}}$")
     plt.ylabel(r"Response")
-    plt.legend()
+    plt.legend(loc='upper left')
     plt.tight_layout()
     if energy == "all":
         save_plot(f"{campaign}{subcampaign}/response", f"mean_median")
@@ -363,10 +376,12 @@ def plot_mean_median_response(campaign, subcampaign, energy):
     plt.close()
 
 
-def plot_run_comparison(features, subcampaign):
+def plot_run_comparison(features):
     """
-    Plot each feature for Run 2´ and Run 3 in one plot.
+    Plot each feature for concatenated Run 2 and Run 3 datasets.
     """
+    subcampaigns = ["a", "d", "e"]
+
     for feature_key in features:
         settings = plot_settings[feature_key]
         feature = settings["feature"]
@@ -378,10 +393,17 @@ def plot_run_comparison(features, subcampaign):
         ylabel = settings.get("ylabel", "Normalised")
         density = settings.get("density", True)
 
-        print(f"Comparing feature '{feature}' between MC20e and MC23e...")
+        print(
+            f"Comparing feature '{feature}' between MC20 and MC23 (all subcampaigns)..."
+        )
 
-        feature_20 = load_feature(feature, 20, subcampaign)
-        feature_23 = load_feature(feature, 23, subcampaign)
+        # Load and concatenate features across subcampaigns
+        feature_20 = np.concatenate(
+            [load_feature(feature, 20, sub) for sub in subcampaigns]
+        )
+        feature_23 = np.concatenate(
+            [load_feature(feature, 23, sub) for sub in subcampaigns]
+        )
 
         if log:
             bins = np.logspace(np.log10(start), np.log10(stop), nbins)
@@ -395,23 +417,20 @@ def plot_run_comparison(features, subcampaign):
             density=density,
             bins=bins,
             histtype="step",
-            label="MC20e",
+            label=r"Run 2",
         )
         plt.hist(
             feature_23,
             density=density,
             bins=bins,
             histtype="step",
-            label="MC23e",
+            label=r"Run 3",
         )
         plt.xlabel(xlabel)
         plt.ylabel(ylabel)
         plt.legend()
         plt.tight_layout()
-        save_plot(
-            f"run_comparison/{20}{subcampaign}_vs_{23}{subcampaign}",
-            f"{feature}_run_comparison",
-        )
+        save_plot("run_comparison/MC20_vs_MC23", f"{feature}_run_comparison")
         plt.close()
 
 
@@ -634,7 +653,7 @@ def main():
                 )
 
         if args.run_comparison or args.all:
-            plot_run_comparison(plot_settings, sub)
+            plot_run_comparison(plot_settings)
 
         if args.NPV_comparison or args.all:
             plot_features_overlayed_by_nPV_bins(sub)

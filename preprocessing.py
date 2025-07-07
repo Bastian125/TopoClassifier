@@ -344,6 +344,7 @@ def build_graphs(
 
         x_np = group[feature_keys].to_numpy(dtype=np.float32)
         y_np = group["label"].to_numpy(dtype=np.float32)
+        response_np = group["cluster_response"].to_numpy(dtype=np.float32)
 
         if x_np.shape[0] != y_np.shape[0] or x_np.ndim != 2:
             continue
@@ -360,6 +361,7 @@ def build_graphs(
             x=x,
             y=y,
             edge_index=edge_index,
+            cluster_response=torch.tensor(response_np, dtype=torch.float32),
             eventNumber=torch.full((num_nodes,), event, dtype=torch.int32),
             jetCnt=torch.full((num_nodes,), jet, dtype=torch.int32),
         )

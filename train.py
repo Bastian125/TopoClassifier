@@ -338,16 +338,26 @@ def get_predictions(model, loader):
 def get_predictions_GNN(model, loader):
     """Run inference and return true and predicted probabilities for GNN."""
     model.eval()
-    y_true, y_pred = [], []
+    y_true, y_pred, cluster_response = [], [], []
     with torch.no_grad():
         for batch in loader:
             batch = batch.to(DEVICE)
             outputs = (
                 torch.sigmoid(model(batch.x, batch.edge_index)).cpu().numpy().flatten()
             )
+
             y_true.extend(batch.y.cpu().numpy())
             y_pred.extend(outputs)
-    return np.array(y_true), np.array(y_pred)
+
+            # Per-node cluster_response must exist in batch
+            if hasattr(batch, "cluster_response"):
+                cluster_response.extend(batch.cluster_response.cpu().numpy())
+            else:
+                raise AttributeError(
+                    "Missing 'cluster_response' attribute in graph batch."
+                )
+
+    return np.array(y_true), np.array(y_pred), np.array(cluster_response)
 
 
 def test_gnn_model(
@@ -376,19 +386,19 @@ def test_gnn_model(
     input_dim = first_batch.x.shape[1]
 
     # Reset loader for full inference
-    test_loader = GeoDataLoader(JetGraphIterableDataset(dataset_pattern), batch_size=BATCH_SIZE)
+    test_loader = GeoDataLoader(
+        JetGraphIterableDataset(dataset_pattern), batch_size=BATCH_SIZE
+    )
 
     # Load model
     model = model_class(input_dim).to(DEVICE)
     model.load_state_dict(torch.load(model_path))
 
     # Predict
-    y_true, y_pred = get_predictions_GNN(model, test_loader)
+    y_true, y_pred, cluster_response = get_predictions_GNN(model, test_loader)
 
     # Save predictions
-    pred_file = os.path.join(
-        test_output_dir, f"GAT_on_{test_campaign}_predictions.h5"
-    )
+    pred_file = os.path.join(test_output_dir, f"GAT_on_{test_campaign}_predictions.h5")
     with h5py.File(pred_file, "w") as f:
         f.create_dataset("y_true", data=y_true)
         f.create_dataset("y_pred", data=y_pred)
@@ -417,11 +427,6 @@ def test_gnn_model(
     else:
         threshold = 0.5
         print("Warning: Threshold file missing, defaulting to 0.5")
-
-    # Load cluster response
-    h5_test_file = os.path.join(data_save_path, f"{test_campaign}_norm_test.h5")
-    with h5py.File(h5_test_file, "r") as f:
-        cluster_response = f["cluster_response"][:]
 
     plot_cluster_response_comparison_histogram(
         true_response=cluster_response,
