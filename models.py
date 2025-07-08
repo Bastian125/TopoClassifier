@@ -101,6 +101,8 @@ class GCN(nn.Module):
         xfinal = torch.relu(self.Linear_final2(xfinal))
         xfinal = self.Linear_final3(xfinal)
 
+        return xfinal
+
 
 class GAT(nn.Module):
     def __init__(self, in_channels):
