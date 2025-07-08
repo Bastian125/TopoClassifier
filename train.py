@@ -245,12 +245,20 @@ def train_model(model, train_loader, val_loader, criterion, optimizer):
     return model, history
 
 
-def train_GNN(train_dataset, val_dataset, input_dim, output_dir, model_str, model_class):
+def train_GNN(
+    train_dataset, val_dataset, input_dim, output_dir, model_str, model_class
+):
     """Train GAT model with early stopping and save results like the DNN block."""
     train_loader = GeoDataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=2)
     val_loader = GeoDataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=2)
 
-    model = model_class(input_dim).to(DEVICE)
+    if model_str == "GCN":
+        model = model_class(
+            in_channels=input_dim, hidden_channels=64, num_classes=1
+        ).to(DEVICE)
+    else:
+        model = model_class(input_dim).to(DEVICE)
+
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     scaler = GradScaler()
