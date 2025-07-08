@@ -1,0 +1,4 @@
+Best threshold: 0.570597
+True Positive Rate (TPR): 0.982282
+False Positive Rate (FPR): 0.034641
+AUC: 0.996344
