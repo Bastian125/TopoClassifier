@@ -1,5 +1,6 @@
 import os
 import torch
+import argparse
 from torch_geometric.data import Data
 
 
@@ -46,7 +47,13 @@ def check_graph_file(file_path):
     )
 
 
-# Example usage
 if __name__ == "__main__":
-    graph_file = "/ceph/e4/users/bschuchardt/public/MA/data/mc20e_graphs_train_chunk0.pt"
-    check_graph_file(graph_file)
+    parser = argparse.ArgumentParser(
+        description="Check a PyTorch Geometric graph file."
+    )
+    parser.add_argument(
+        "path", help="Path to the graph .pt file"
+    )  # <-- Positional argument
+    args = parser.parse_args()
+
+    check_graph_file(args.path)
