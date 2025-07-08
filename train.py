@@ -22,7 +22,7 @@ from tqdm import tqdm
 from config import data_save_path, output_path, feature_keys, jet_feature_keys
 from io_utils import ensure_dir_exists
 from dataloader import HDF5Dataset, JetGraphIterableDataset
-from models import DNNModel, GAT
+from models import DNN, GCN, GAT
 from evaluate import (
     plot_roc_curve,
     plot_precision_recall,
@@ -85,6 +85,11 @@ model_group.add_argument(
     help="DNN model that classifies hard-scatter and pile-up clusters with cluster and jet features.",
 )
 model_group.add_argument(
+    "--GCN",
+    action="store_true",
+    help="Graph Convolutional Network (GCN) for topo-cluster classification.",
+)
+model_group.add_argument(
     "--GAT",
     action="store_true",
     help="Graph Attention Network (GAT) for topo-cluster classification.",
@@ -117,6 +122,8 @@ if args.DNN:
     model_str = "DNN"
 elif args.JetDNN:
     model_str = "JetDNN"
+elif args.GCN:
+    model_str = "GCN"
 elif args.GAT:
     model_str = "GAT"
 
@@ -477,7 +484,7 @@ def main():
                 pos_weight = f.attrs["pos_weight"]
             pos_weight = torch.tensor(pos_weight, dtype=torch.float32).to(DEVICE)
 
-            uncompiled_model = DNNModel(input_dim).to(DEVICE)
+            uncompiled_model = DNN(input_dim).to(DEVICE)
             model = torch.compile(uncompiled_model)
             criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
             optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
@@ -532,7 +539,7 @@ def main():
                 pos_weight = f.attrs["pos_weight"]
             pos_weight = torch.tensor(pos_weight, dtype=torch.float32).to(DEVICE)
 
-            uncompiled_model = DNNModel(input_dim).to(DEVICE)
+            uncompiled_model = DNN(input_dim).to(DEVICE)
             model = torch.compile(uncompiled_model)
             criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
             optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
@@ -595,10 +602,10 @@ def main():
 
         if model_str == "DNN" or model_str == "JetDNN":
             if model_str == "DNN":
-                model_cls = DNNModel
+                model_cls = DNN
                 model = model_cls(len(feature_keys)).to(DEVICE)
             elif model_str == "JetDNN":
-                model_cls = DNNModel
+                model_cls = DNN
                 model = model_cls(len(jet_feature_keys)).to(DEVICE)
 
             state_dict = torch.load(os.path.join(output_dir, f"{model_str}_best.pt"))
