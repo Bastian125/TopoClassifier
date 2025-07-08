@@ -6,7 +6,7 @@ All models used in train.py are defined here.
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GATConv
+from torch_geometric.nn import GCNConv, GATConv
 
 
 # ---------- Models ---------- #
@@ -49,6 +49,57 @@ class DNNModel(nn.Module):
 
     def forward(self, x):
         return self.model(x)
+
+
+class GCNModel(nn.Module):
+    def __init__(self, in_channels, hidden_channels, num_classes):
+        super(GCNModel, self).__init__()
+
+        # --- Graph convolutional path ---
+        self.conv1 = GCNConv(in_channels, hidden_channels)
+        self.conv2 = GCNConv(hidden_channels, hidden_channels)
+
+        # --- Raw feature MLP path ---
+        self.Linear_node1 = torch.nn.Linear(in_channels, 32)
+        self.Linear_node2 = torch.nn.Linear(32, 16)
+
+        # --- Post-GCN projection (first GCN output) ---
+        self.Linear_node_After1 = torch.nn.Linear(hidden_channels, 16)
+        self.Linear_node_After2 = torch.nn.Linear(16, 16)
+
+        # --- Post-GCN projection (second GCN output) ---
+        self.Linear_node_After3 = torch.nn.Linear(hidden_channels, 16)
+        self.Linear_node_After4 = torch.nn.Linear(16, 16)
+
+        # --- Final classifier MLP after feature fusion ---
+        self.Linear_final1 = torch.nn.Linear(48, 64)
+        self.Linear_final2 = torch.nn.Linear(64, 32)
+        self.Linear_final3 = torch.nn.Linear(32, 1)
+
+    def forward(self, x, edge_index):
+        # --- MLP path from raw input ---
+        gg1 = torch.relu(self.Linear_node1(x))
+        gg2 = torch.relu(self.Linear_node2(gg1))
+
+        # --- GCN path ---
+        x1 = torch.relu(self.conv1(x, edge_index))
+        x2 = torch.relu(self.conv2(x1, edge_index))
+
+        # --- MLP on GCN1 output ---
+        x_after1 = torch.relu(self.Linear_node_After1(x1))
+        x_after1 = torch.relu(self.Linear_node_After2(x_after1))
+
+        # --- MLP on GCN2 output ---
+        x_after2 = torch.relu(self.Linear_node_After3(x2))
+        x_after2 = torch.relu(self.Linear_node_After4(x_after2))
+
+        # --- Feature fusion ---
+        xfinal = torch.cat((gg2, x_after1, x_after2), dim=1)
+
+        # --- Final classification MLP ---
+        xfinal = torch.relu(self.Linear_final1(xfinal))
+        xfinal = torch.relu(self.Linear_final2(xfinal))
+        xfinal = self.Linear_final3(xfinal)
 
 
 class GAT(nn.Module):
