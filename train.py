@@ -245,12 +245,12 @@ def train_model(model, train_loader, val_loader, criterion, optimizer):
     return model, history
 
 
-def train_GNN(train_dataset, val_dataset, input_dim, output_dir, model_str):
+def train_GNN(train_dataset, val_dataset, input_dim, output_dir, model_str, model_class):
     """Train GAT model with early stopping and save results like the DNN block."""
     train_loader = GeoDataLoader(train_dataset, batch_size=BATCH_SIZE, num_workers=2)
     val_loader = GeoDataLoader(val_dataset, batch_size=BATCH_SIZE, num_workers=2)
 
-    model = GAT(input_dim).to(DEVICE)
+    model = model_class(input_dim).to(DEVICE)
     criterion = nn.BCEWithLogitsLoss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
     scaler = GradScaler()
@@ -312,7 +312,7 @@ def train_GNN(train_dataset, val_dataset, input_dim, output_dir, model_str):
             wait = 0
         else:
             wait += 1
-            if wait >= 5:
+            if wait >= 20:
                 print("Early stopping triggered.")
                 break
 
@@ -561,7 +561,10 @@ def main():
 
             plot_training_history(history)
 
-        if model_str == "GAT":
+        if model_str in ["GAT", "GCN"]:
+
+            model_cls = GAT if model_str == "GAT" else GCN
+
             train_pattern = os.path.join(
                 data_save_path, f"{args.train_campaign}_graph_train_chunk*.pt"
             )
@@ -583,6 +586,7 @@ def main():
                 input_dim=input_dim,
                 output_dir=output_dir,
                 model_str=model_str,
+                model_class=model_cls,
             )
 
             plot_training_history(history)
@@ -677,13 +681,17 @@ def main():
                 threshold=best_threshold,
             )
 
-        elif model_str == "GAT":
+        elif model_str == "GAT" or model_str == "GCN":
             test_pattern = os.path.join(
                 data_save_path, f"{args.test_campaign}_graph_test_chunk*.pt"
             )
+
             model_path = os.path.join(output_dir, f"{model_str}_best.pt")
+
+            model_cls = GAT if model_str == "GAT" else GCN
+
             test_gnn_model(
-                model_class=GAT,
+                model_class=model_cls,
                 dataset_pattern=test_pattern,
                 model_path=model_path,
                 test_output_dir=test_out_dir,
