@@ -12,14 +12,14 @@ from torch_geometric.nn import GCNConv, GATConv
 # ---------- Models ---------- #
 
 
-class DNNModel(nn.Module):
+class DNN(nn.Module):
     """
     Deep Neural Network model for binary classification.
     Final layer does NOT include sigmoid; use BCEWithLogitsLoss instead.
     """
 
     def __init__(self, input_dim):
-        super(DNNModel, self).__init__()
+        super(DNN, self).__init__()
         self.model = nn.Sequential(
             nn.Linear(input_dim, 512),
             nn.ReLU(),
@@ -51,9 +51,9 @@ class DNNModel(nn.Module):
         return self.model(x)
 
 
-class GCNModel(nn.Module):
+class GCN(nn.Module):
     def __init__(self, in_channels, hidden_channels, num_classes):
-        super(GCNModel, self).__init__()
+        super(GCN, self).__init__()
 
         # --- Graph convolutional path ---
         self.conv1 = GCNConv(in_channels, hidden_channels)
