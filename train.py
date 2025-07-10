@@ -36,6 +36,8 @@ from evaluate import (
 # ---------- File Config ---------- #
 LEARNING_RATE_RUN2 = 1e-3
 LEARNING_RATE_RUN3 = 1e-5
+LEARNING_RATE_GNN_RUN2 = 4e-5
+LEARNING_RATE_GNN_RUN3 = 1e-5
 BATCH_SIZE_RUN2 = 512
 BATCH_SIZE_RUN3 = 1024
 EPOCHS = 400
@@ -129,11 +131,17 @@ elif args.GAT:
 
 
 # Set learning rate and batch size depending on Run2 or Run3
-if "Run2" in train_dataset_str:
+if "Run2" in train_dataset_str and "DNN" or "JetDNN" in model_str:
     LEARNING_RATE = LEARNING_RATE_RUN2
     BATCH_SIZE = BATCH_SIZE_RUN2
-else:
+elif "Run2" in train_dataset_str and "GCN" or "GAT" in model_str:
+    LEARNING_RATE = LEARNING_RATE_GNN_RUN2
+    BATCH_SIZE = BATCH_SIZE_RUN2
+elif "Run3" in train_dataset_str and "DNN" or "JetDNN" in model_str:
     LEARNING_RATE = LEARNING_RATE_RUN3
+    BATCH_SIZE = BATCH_SIZE_RUN3
+elif "Run3" in train_dataset_str and "GCN" or "GAT" in model_str:
+    LEARNING_RATE = LEARNING_RATE_GNN_RUN3
     BATCH_SIZE = BATCH_SIZE_RUN3
 
 
