@@ -91,7 +91,7 @@ class GCN(nn.Module):
         x1 = self.norm1(x1)
         x1 = torch.relu(x1)
         x1 = self.dropout1(x1)
-    
+
         x2 = self.conv2(x1, edge_index)
         x2 = self.norm2(x2)
         x2 = torch.relu(x2)
@@ -122,7 +122,10 @@ class GAT(nn.Module):
 
         # GAT layers
         self.conv1 = GATConv(in_channels, 16, heads=8, dropout=0.1)
+        self.norm1 = nn.LayerNorm(128)
+
         self.conv2 = GATConv(16 * 8, 32, heads=8, dropout=0.1)
+        self.norm2 = nn.LayerNorm(256)
 
         # Feed-forward pathway for raw input features
         self.Linear_node1 = nn.Linear(in_channels, 32)
@@ -147,8 +150,13 @@ class GAT(nn.Module):
         gg2 = F.relu(self.Linear_node2(gg1))
 
         # GAT path
-        x1 = F.relu(self.conv1(x, edge_index))  # [N, 128]
-        x2 = F.relu(self.conv2(x1, edge_index))  # [N, 256]
+        x1 = self.conv1(x, edge_index)  # [N, 128]
+        x1 = self.norm1(x1)  # LayerNorm over features
+        x1 = F.relu(x1)
+
+        x2 = self.conv2(x1, edge_index)  # [N, 256]
+        x2 = self.norm2(x2)
+        x2 = F.relu(x2)
 
         # Feed-forward on x1 and x2
         x_after1 = F.relu(self.Linear_node_After1(x1))
