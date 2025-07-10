@@ -57,7 +57,12 @@ class GCN(nn.Module):
 
         # --- Graph convolutional path ---
         self.conv1 = GCNConv(in_channels, hidden_channels)
+        self.norm1 = nn.LayerNorm(hidden_channels)
+        self.dropout1 = nn.Dropout(0.1)
+
         self.conv2 = GCNConv(hidden_channels, hidden_channels)
+        self.norm2 = nn.LayerNorm(hidden_channels)
+        self.dropout2 = nn.Dropout(0.1)
 
         # --- Raw feature MLP path ---
         self.Linear_node1 = torch.nn.Linear(in_channels, 32)
@@ -82,8 +87,15 @@ class GCN(nn.Module):
         gg2 = torch.relu(self.Linear_node2(gg1))
 
         # --- GCN path ---
-        x1 = torch.relu(self.conv1(x, edge_index))
-        x2 = torch.relu(self.conv2(x1, edge_index))
+        x1 = self.conv1(x, edge_index)
+        x1 = self.norm1(x1)
+        x1 = torch.relu(x1)
+        x1 = self.dropout1(x1)
+    
+        x2 = self.conv2(x1, edge_index)
+        x2 = self.norm2(x2)
+        x2 = torch.relu(x2)
+        x2 = self.dropout2(x2)
 
         # --- MLP on GCN1 output ---
         x_after1 = torch.relu(self.Linear_node_After1(x1))
