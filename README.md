@@ -15,13 +15,13 @@ A ML-based repo for classifying hard-scatter from mixed (hard-scatter + pile-up)
 - `preprocessing.py` – clean/prepare datasets  
 - `models.py` – defines model architectures  
 - `train.py` – train models  
-- `evaluate.py` – evaluate performance of ML models  
+- `evaluate.py` – evaluate the performance of ML models  
 - `plot.py` – visualise results  
 - `check_graphs.py` – verify graph data integrity  
 - `io_utils.py` – helper utilities
 
 ## Preprocessing
-The preprocessing must be run first in order to generate the `.pt` and `.h5` files. Without this step the other scripts will not run.
+The preprocessing must be run first in order to generate the `.pt` and `.h5` files. Without this step, the other scripts will not run.
 ```
 Usage: preprocessing.py [-h] (--campaign {mc20a,mc20d,mc20e,mc23a,mc23d,mc23e,mc20,mc23} | --full | --print_features) [--no_normalisation] [--prepare_graphs] [--build_graphs]
 
@@ -51,6 +51,18 @@ Options:
 
 ```
 
+## Check Graphs
+Sanity check graphs created in one of the `.pt`-files.
+```
+Usage: check_graphs.py [-h] path
+
+Check a PyTorch Geometric graph file.
+
+positional arguments:
+  path        Path to the graph .pt file
+
+```
+
 ## Plotting
 Creates plots for physics analysis.
 ```
@@ -70,5 +82,26 @@ options:
                         Creates response plots for different n_PV bins, and no pile-up for both campaigns.
   --PU_response         Plot mean and median cluster response in n_PV bins for clusters with the complete energy range,clusters with energy lower than 100~GeV, and clusters with energy greater than or equal to 100~GeV
   --all                 Make every plot.
+
+```
+
+## Training
+```
+Usage: train.py [-h] --train_campaign {mc20a,mc20d,mc20e,mc23a,mc23d,mc23e,mc20,mc23} [--test_campaign {mc20a,mc20d,mc20e,mc23a,mc23d,mc23e}] [--plot] [--feature_importance] (--DNN | --JetDNN | --GCN | --GAT)
+
+Train and/or test ML models on specific ATLAS campaigns.
+
+options:
+  -h, --help            show this help message and exit
+  --train_campaign {mc20a,mc20d,mc20e,mc23a,mc23d,mc23e,mc20,mc23}
+                        Specify the campaign used for training.
+  --test_campaign {mc20a,mc20d,mc20e,mc23a,mc23d,mc23e}
+                        Optionally test the model trained on --train_campaign against this campaign.
+  --plot                Plot training history of the model trained on --train_campaign.
+  --feature_importance  Plots feature importance for model trained on --train_campaign and tested on --test_campaign.
+  --DNN                 DNN model that classifies hard-scatter and pile-up clusters.
+  --JetDNN              DNN model that classifies hard-scatter and pile-up clusters with cluster and jet features.
+  --GCN                 Graph Convolutional Network (GCN) for topo-cluster classification.
+  --GAT                 Graph Attention Network (GAT) for topo-cluster classification.
 
 ```
