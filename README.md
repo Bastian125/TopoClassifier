@@ -22,3 +22,31 @@ A ML-based repo for classifying hard-scatter from mixed (hard-scatter + pile-up)
 
 ## Preprocessing
 The preprocessing must be run first in order to generate the `.pt` and `.h5` files. Without this step the other scripts will not run.
+```
+Usage: preprocessing.py [-h] (--campaign {mc20a,mc20d,mc20e,mc23a,mc23d,mc23e,mc20,mc23} | --full | --print_features) [--no_normalisation] [--prepare_graphs] [--build_graphs]
+
+Preprocess ROOT files and HDF5 splits.
+
+Options:
+  -h, --help
+      Show this help message and exit.
+
+  --campaign {mc20a,mc20d,mc20e,mc23a,mc23d,mc23e,mc20,mc23}
+      Specify the campaign for preprocessing or renormalisation.
+
+  --full
+      Run full preprocessing on all datasets.
+
+  --print_features
+      Print all features in the root file.
+
+  --no_normalisation
+      Skip normalisation and time transformation.
+
+  --prepare_graphs
+      Prepare HDF5 files for graph building.
+
+  --build_graphs
+      Build and save PyG graphs from normalised HDF5 splits.
+
+```
