@@ -10,7 +10,7 @@ A ML-based repo for classifying hard-scatter from mixed (hard-scatter + pile-up)
    `python train.py -h`  
 
 ## Scripts Overview
-- `config.py` – define plot settings and d  
+- `config.py` – define plot settings and features to load from `.root`-files  
 - `dataloader.py` – load and batch data  
 - `preprocessing.py` – clean/prepare datasets  
 - `models.py` – defines model architectures  
