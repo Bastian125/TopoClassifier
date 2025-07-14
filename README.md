@@ -8,3 +8,13 @@ A ML-based repo for classifying hard-scatter from mixed (hard-scatter + pile-up)
 2. Install dependencies found in ```dependencies.txt```  
 3. Run any script; for help use the `-h` flag:  
    `python train.py -h`  
+
+## Scripts Overview
+- `dataloader.py` – load and batch data  
+- `preprocessing.py` – clean/prepare datasets  
+- `models.py` – defines model architectures  
+- `train.py` – train models  
+- `evaluate.py` – evaluate performance  
+- `plot.py` – visualise results  
+- `check_graphs.py` – verify graph data integrity  
+- `io_utils.py`, `config.py`, `plot.py` – helper utilities
