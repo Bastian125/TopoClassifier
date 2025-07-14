@@ -10,7 +10,7 @@ A ML-based repo for classifying hard-scatter from mixed (hard-scatter + pile-up)
    `python train.py -h`  
 
 ## Scripts Overview
-- `config.py` – define plot settings and features to load from `.root`-files  
+- `config.py` – define plot settings, features to load from `.root`-files and paths for input and output files  
 - `dataloader.py` – load and batch data  
 - `preprocessing.py` – clean/prepare datasets  
 - `models.py` – defines model architectures  
@@ -48,5 +48,27 @@ Options:
 
   --build_graphs
       Build and save PyG graphs from normalised HDF5 splits.
+
+```
+
+## Plotting
+Creates plots for physics analysis.
+```
+Usage: plot.py [-h] (--avgMu | --NPV | --run_comparison | --NPV_comparison | --high_response | --response | --response_noPU_vs_PU | --PU_response | --all)
+
+Plot cluster features for MC20a/d/e and MC23a/d/e.
+
+options:
+  -h, --help            show this help message and exit
+  --avgMu               Plots distribution of avgMu for both campaigns
+  --NPV                 Plots distribution of n_PV for both campaigns
+  --run_comparison      Plot comparison of every feature for Run 2 and Run 3.
+  --NPV_comparison      Plot every feature for different n_PV bins for both campaigns.
+  --high_response       Plot every feature of both campaigns for cluster response lower or equal to 40 or higher than 40 for comparison.
+  --response            Creates response plots for different n_PV bins for both campaigns.
+  --response_noPU_vs_PU
+                        Creates response plots for different n_PV bins, and no pile-up for both campaigns.
+  --PU_response         Plot mean and median cluster response in n_PV bins for clusters with the complete energy range,clusters with energy lower than 100~GeV, and clusters with energy greater than or equal to 100~GeV
+  --all                 Make every plot.
 
 ```
