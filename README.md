@@ -21,3 +21,4 @@ A ML-based repo for classifying hard-scatter from mixed (hard-scatter + pile-up)
 - `io_utils.py` – helper utilities
 
 ## Preprocessing
+The preprocessing must be run first in order to generate the `.pt` and `.h5` files. Without this step the other scripts will not run.
