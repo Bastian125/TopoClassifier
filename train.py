@@ -133,15 +133,17 @@ elif args.GAT:
 if "Run2" in train_dataset_str and "DNN" or "JetDNN" in model_str:
     LEARNING_RATE = LEARNING_RATE_RUN2
     BATCH_SIZE = BATCH_SIZE_RUN2
-elif "Run2" in train_dataset_str and "GCN" or "GAT" in model_str:
+elif "Run2" in train_dataset_str and "GAT" in model_str:
     LEARNING_RATE = LEARNING_RATE_GNN
     BATCH_SIZE = BATCH_SIZE_RUN2
 elif "Run3" in train_dataset_str and "DNN" or "JetDNN" in model_str:
     LEARNING_RATE = LEARNING_RATE_RUN3
     BATCH_SIZE = BATCH_SIZE_RUN3
-elif "Run3" in train_dataset_str and "GCN" or "GAT" in model_str:
+elif "Run3" in train_dataset_str and "GAT" in model_str:
     LEARNING_RATE = LEARNING_RATE_GNN
     BATCH_SIZE = BATCH_SIZE_RUN3
+elif "Run2" in train_dataset_str and "GCN" in model_str:
+    
 
 
 # ---------- Helper Functions ---------- #
