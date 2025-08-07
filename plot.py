@@ -169,61 +169,77 @@ def plot_feature(
 def plot_response(campaign, subcampaign):
     """
     Plots response for one MC campaign and for different n_PV bins.
+    Produces:
+    - Full range (0–100)
+    - Zoomed range (0–5)
+    - Fine range (0–1)
     """
     response = load_feature("cluster_response", campaign, subcampaign=subcampaign)
     n_PV = load_feature("nPrimVtx", campaign, subcampaign=subcampaign)
 
-    nbins = 100
-    beginning = 0
-    end = 100
-    hrange = [beginning, end]
-    lim = (beginning, end)
+    def plot_range(beginning, end, suffix, log_y=True):
+        nbins = 100
+        hrange = [beginning, end]
+        lim = (beginning, end)
 
-    plt.hist(
-        response[(n_PV <= 10)],
-        bins=nbins,
-        range=hrange,
-        histtype="step",
-        density=True,
-        label=r"$ 1 < n_{\mathrm{PV}} \leq 10$",
-    )
-    plt.hist(
-        response[(n_PV <= 20) & (n_PV > 10)],
-        bins=nbins,
-        range=hrange,
-        histtype="step",
-        density=True,
-        label=r"$10 < n_{\mathrm{PV}} \leq 20$",
-    )
-    plt.hist(
-        response[(n_PV <= 30) & (n_PV > 20)],
-        bins=nbins,
-        range=hrange,
-        histtype="step",
-        density=True,
-        label=r"$20 < n_{\mathrm{PV}} \leq 30$",
-    )
-    plt.hist(
-        response[(n_PV > 30)],
-        bins=nbins,
-        range=hrange,
-        histtype="step",
-        density=True,
-        label=r"$n_{\mathrm{PV}} > 30$",
-    )
-    plt.yscale("log")
-    plt.xlabel(r"Response")
-    plt.ylabel(r"Normalised")
-    plt.xlim(lim)
-    plt.legend()
-    plt.tight_layout()
-    save_plot(f"{campaign}{subcampaign}/response", f"response")
-    plt.close()
+        plt.hist(
+            response[(n_PV <= 10)],
+            bins=nbins,
+            range=hrange,
+            histtype="step",
+            density=True,
+            label=r"$1 < n_{\mathrm{PV}} \leq 10$",
+        )
+        plt.hist(
+            response[(n_PV <= 20) & (n_PV > 10)],
+            bins=nbins,
+            range=hrange,
+            histtype="step",
+            density=True,
+            label=r"$10 < n_{\mathrm{PV}} \leq 20$",
+        )
+        plt.hist(
+            response[(n_PV <= 30) & (n_PV > 20)],
+            bins=nbins,
+            range=hrange,
+            histtype="step",
+            density=True,
+            label=r"$20 < n_{\mathrm{PV}} \leq 30$",
+        )
+        plt.hist(
+            response[(n_PV > 30)],
+            bins=nbins,
+            range=hrange,
+            histtype="step",
+            density=True,
+            label=r"$n_{\mathrm{PV}} > 30$",
+        )
+
+        if log_y:
+            plt.yscale("log")
+
+        plt.xlabel(r"Response")
+        plt.ylabel("Normalised")
+        plt.xlim(lim)
+        plt.legend()
+        plt.tight_layout()
+
+        save_plot(f"{campaign}{subcampaign}/response", f"response_{suffix}")
+        plt.close()
+
+    # Create all three plots
+    plot_range(0, 100, "full")
+    plot_range(0.1, 5, "zoomed")
+    plot_range(0.1, 1, "fine", log_y=False)  # Disable log scale for tiny range
 
 
 def plot_response_with_and_with_out_PU(campaign, subcampaign):
     """
     Plots response for one MC campaign and for different n_PV bins.
+    Includes:
+    - Full range (0–100)
+    - Zoomed range (0–5)
+    - Fine range (0–1)
     """
     response = load_feature("cluster_response", campaign, subcampaign=subcampaign)
     response_noPU = load_feature(
@@ -231,60 +247,69 @@ def plot_response_with_and_with_out_PU(campaign, subcampaign):
     )
     n_PV = load_feature("nPrimVtx", campaign, subcampaign=subcampaign)
 
-    nbins = 100
-    beginning = 0
-    end = 100
-    hrange = [beginning, end]
-    lim = (beginning, end)
+    def plot_range(beginning, end, suffix, log_y=True):
+        nbins = 100
+        hrange = [beginning, end]
+        lim = (beginning, end)
 
-    plt.hist(
-        response[(n_PV <= 10)],
-        bins=nbins,
-        range=hrange,
-        histtype="step",
-        density=True,
-        label=r"$ 1 < n_{\mathrm{PV}} \leq 10$",
-    )
-    plt.hist(
-        response[(n_PV <= 20) & (n_PV > 10)],
-        bins=nbins,
-        range=hrange,
-        histtype="step",
-        density=True,
-        label=r"$10 < n_{\mathrm{PV}} \leq 20$",
-    )
-    plt.hist(
-        response[(n_PV <= 30) & (n_PV > 20)],
-        bins=nbins,
-        range=hrange,
-        histtype="step",
-        density=True,
-        label=r"$20 < n_{\mathrm{PV}} \leq 30$",
-    )
-    plt.hist(
-        response[(n_PV > 30)],
-        bins=nbins,
-        range=hrange,
-        histtype="step",
-        density=True,
-        label=r"$n_{\mathrm{PV}} > 30$",
-    )
-    plt.hist(
-        response_noPU,
-        bins=nbins,
-        range=hrange,
-        histtype="step",
-        density=True,
-        label="No pile-up",
-    )
-    plt.yscale("log")
-    plt.xlabel(r"Response")
-    plt.ylabel(r"Normalised")
-    plt.xlim(lim)
-    plt.legend()
-    plt.tight_layout()
-    save_plot(f"{campaign}{subcampaign}/response", f"noPU_vs_PU_response_{campaign}")
-    plt.close()
+        plt.hist(
+            response[(n_PV <= 10)],
+            bins=nbins,
+            range=hrange,
+            histtype="step",
+            density=True,
+            label=r"$1 < n_{\mathrm{PV}} \leq 10$",
+        )
+        plt.hist(
+            response[(n_PV <= 20) & (n_PV > 10)],
+            bins=nbins,
+            range=hrange,
+            histtype="step",
+            density=True,
+            label=r"$10 < n_{\mathrm{PV}} \leq 20$",
+        )
+        plt.hist(
+            response[(n_PV <= 30) & (n_PV > 20)],
+            bins=nbins,
+            range=hrange,
+            histtype="step",
+            density=True,
+            label=r"$20 < n_{\mathrm{PV}} \leq 30$",
+        )
+        plt.hist(
+            response[(n_PV > 30)],
+            bins=nbins,
+            range=hrange,
+            histtype="step",
+            density=True,
+            label=r"$n_{\mathrm{PV}} > 30$",
+        )
+        plt.hist(
+            response_noPU,
+            bins=nbins,
+            range=hrange,
+            histtype="step",
+            density=True,
+            label="No pile-up",
+        )
+
+        if log_y:
+            plt.yscale("log")
+        plt.xlabel(r"Response")
+        plt.ylabel("Normalised")
+        plt.xlim(lim)
+        plt.legend()
+        plt.tight_layout()
+        save_plot(
+            f"{campaign}{subcampaign}/response",
+            f"noPU_vs_PU_response_{campaign}_{suffix}",
+        )
+        plt.close()
+
+    # Generate all three plots
+    plot_range(0, 100, "full")
+    plot_range(0.1, 5, "zoomed")
+    plot_range(0.1, 1, "fine", log_y=False)  # log scale off for small values
 
 
 def plot_mean_median_response(campaign, subcampaign, energy):
@@ -345,7 +370,6 @@ def plot_mean_median_response(campaign, subcampaign, energy):
         median_uncertainty.append(sigma_median)
         n_PV_centers.append((n_PV_min + n_PV_max) / 2)
 
-
     # Energy label for legend
     if energy == "all":
         energy_label = "All energies"
@@ -365,7 +389,7 @@ def plot_mean_median_response(campaign, subcampaign, energy):
     plt.xlim(10, 45)
     plt.xlabel(r"$N_{\mathrm{PV}}$")
     plt.ylabel(r"Response")
-    plt.legend(loc='upper left')
+    plt.legend(loc="upper left")
     plt.tight_layout()
     if energy == "all":
         save_plot(f"{campaign}{subcampaign}/response", f"mean_median")
