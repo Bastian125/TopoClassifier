@@ -140,18 +140,25 @@ def plot_feature(
     xlabel=None,
     ylabel="Normalised",
     density=True,
+    integer_bins=False,
 ):
     """
-    Plot a single feature, linear or log.
+    Plot a single feature, linear or log. Optionally uses integer bins.
     """
     print(f"Plot {feature} for MC{campaign}e...")
     if xlabel is None:
         xlabel = feature
+
     feature_data = load_feature(
         feature=feature, campaign=campaign, subcampaign=subcampaign
     )
 
-    if log:
+    if integer_bins:
+        min_val = int(np.floor(np.min(feature_data)))
+        max_val = int(np.ceil(np.max(feature_data)))
+        bins = np.arange(min_val, max_val + 1, 1)
+        plt.xlim([min_val - 0.5, max_val + 0.5])
+    elif log:
         bins = np.logspace(np.log10(start), np.log10(stop), nbins)
         plt.xscale("log")
     else:
@@ -602,6 +609,7 @@ def plot_all_features(subcampaign):
             nbins = settings["nbins"]
             start = settings["start"]
             stop = settings["stop"]
+            integer_bins = settings["integer_bins"]
             log = settings.get("log", False)
             xlabel = settings.get("xlabel", feature)
             ylabel = settings.get("ylabel", "Normalised")
@@ -616,6 +624,7 @@ def plot_all_features(subcampaign):
                 nbins=nbins,
                 start=start,
                 stop=stop,
+                integer_bins=integer_bins,
                 log=log,
                 xlabel=xlabel,
                 ylabel=ylabel,
@@ -652,6 +661,7 @@ def main():
                     stop=100,
                     xlabel=r"$\langle \mu \rangle$",
                     ylabel="Number of topoclusters",
+                    integer_bins=True,
                 )
                 save_plot(
                     save_dir=f"{campaign}{sub}/summary",
@@ -670,6 +680,7 @@ def main():
                     stop=50,
                     xlabel=r"$n_{\mathrm{PV}}$",
                     ylabel="Number of topoclusters",
+                    integer_bins=True,
                 )
                 save_plot(
                     save_dir=f"{campaign}{sub}/summary",
