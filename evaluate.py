@@ -15,7 +15,7 @@ from sklearn.metrics import (
     average_precision_score,
 )
 
-from config import set_style
+from config import set_style, plot_settings
 
 
 # ---------- Helper Functions ---------- #
@@ -300,9 +300,10 @@ def plot_permutation_importance(
     sorted_idx = np.argsort(importances)[::-1]
     sorted_features = np.array(feature_names)[sorted_idx]
     sorted_importances = np.array(importances)[sorted_idx]
+    latex_labels = [plot_settings.get(f, {}).get("xlabel", f) for f in sorted_features]
 
     plt.figure(figsize=(10, 6))
-    plt.barh(sorted_features, sorted_importances)
+    plt.barh(latex_labels, sorted_importances)
     plt.xlabel("Drop in AUC")
     plt.gca().invert_yaxis()
     plt.tight_layout()
