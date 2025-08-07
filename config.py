@@ -184,9 +184,48 @@ def set_style():
     )
 
 
+latex_labels = {
+    "clusterE": r"$E_{\mathrm{clus}}^{\mathrm{EM}}$",
+    "clusterPt": r"$p_{\mathrm{T}}^{\mathrm{clus}}$",
+    "cluster_FIRST_ENG_DENS": r"$\langle \rho_{\mathrm{cell}} \rangle$",
+    "cluster_EM_PROBABILITY": r"$\mathcal{P}_{\mathrm{clus}}^{\mathrm{EM}}$",
+    "cluster_CENTER_LAMBDA": r"$\lambda_{\mathrm{clus}}$",
+    "cluster_CENTER_MAG": r"$c$",
+    "cluster_nCells_tot": r"$n_{\mathrm{cells}}$",
+    "cluster_ENG_FRAC_EM": r"$f_{\mathrm{emc}}$",
+    "cluster_SECOND_TIME": r"$\sigma_{\mathrm{t}}^{2}$",
+    "cluster_AVG_TILE_Q": r"$\langle Q_{\mathrm{Tile}} \rangle$",
+    "cluster_AVG_LAR_Q": r"$\langle Q_{\mathrm{LAr}} \rangle$",
+    "cluster_SECOND_R": r"$\langle r_{\mathrm{cell}}^{2} \rangle$",
+    "cluster_LATERAL": r"$m_{\mathrm{lat}}^{2}$",
+    "cluster_time": r"$t_{\mathrm{clus}}$",
+    "cluster_ISOLATION": r"$f_{\mathrm{iso}}$",
+    "cluster_DELTA_ALPHA": r"$\Delta \alpha$",
+    "cluster_DELTA_THETA": r"$\Delta \theta$",
+    "clusterEta": r"$y_{\mathrm{clus}}$",
+    "cluster_DELTA_PHI": r"$\Delta \phi$",
+    "clusterPhi": r"$\phi_{\mathrm{clus}}$",
+    "cluster_SECOND_LAMBDA": r"$\langle \lambda_{\mathrm{cell}}^{2} \rangle$",
+    "cluster_LONGITUDINAL": r"$m_{\mathrm{long}}^{2}$",
+    "cluster_CELL_SIGNIFICANCE": r"$\max \{ \zeta_{\mathrm{clus}}^{\mathrm{EM}} \}$",
+    "cluster_ENG_CALIB_TOT": r"$E_{\mathrm{clus}}^{\mathrm{dep}}$",
+    "cluster_SIGNIFICANCE": r"$\varsigma_{\mathrm{clus}}^{\mathrm{EM}}$",
+    "nPrimVtx": r"$n_{\mathrm{PV}}$",
+    "avgMu": r"$\langle \mu \rangle$",
+    "jetRawEta": r"$\eta_{\mathrm{jet}}$",
+    "jetRawPhi": r"$\phi_{\mathrm{jet}}$",
+    "jetRawE": r"$E_{\mathrm{jet}}^{\mathrm{const}}$",
+    "jetRawPt": r"$p_{\mathrm{T}}^{\mathrm{jet}}$",
+    "diffEta": r"$\Delta \eta$",
+    "zT": r"$z_{\mathrm{T}}$",
+    "zL": r"$z_{\mathrm{L}}$",
+    "zRel": r"$z_{\mathrm{rel}}$",
+}
+
 plot_settings = {
     "avgMu": {
         "feature": "avgMu",
+        "integer_bins": True,
         "nbins": 40,
         "start": 0,
         "stop": 100,
@@ -196,15 +235,17 @@ plot_settings = {
     },
     "NPV": {
         "feature": "nPrimVtx",
+        "integer_bins": True,
         "nbins": 50,
         "start": 0,
         "stop": 50,
-        "xlabel": r"$n_{\mathrm{PV}}$",
+        "xlabel": r"$N_{\mathrm{PV}}$",
         "ylabel": "Number of topoclusters",
         "log": False,
     },
     "clusterE": {
         "feature": "clusterE",
+        "integer_bins": False,
         "nbins": 50,
         "start": 1e-1,
         "stop": 1e2,
@@ -213,6 +254,7 @@ plot_settings = {
     },
     "cluster_FIRST_ENG_DENS": {
         "feature": "cluster_FIRST_ENG_DENS",
+        "integer_bins": False,
         "nbins": 100,
         "start": 1e-10,
         "stop": 1e-4,
@@ -221,6 +263,7 @@ plot_settings = {
     },
     "cluster_EM_PROBABILITY": {
         "feature": "cluster_EM_PROBABILITY",
+        "integer_bins": False,
         "nbins": 50,
         "start": 0,
         "stop": 1,
@@ -228,6 +271,7 @@ plot_settings = {
     },
     "cluster_CENTER_LAMBDA": {
         "feature": "cluster_CENTER_LAMBDA",
+        "integer_bins": False,
         "nbins": 50,
         "start": 1e0,
         "stop": 1e4,
@@ -236,6 +280,7 @@ plot_settings = {
     },
     "cluster_nCells_tot": {
         "feature": "cluster_nCells_tot",
+        "integer_bins": False,
         "nbins": 50,
         "start": 1e1,
         "stop": 1e3,
@@ -244,6 +289,7 @@ plot_settings = {
     },
     "cluster_CENTER_MAG": {
         "feature": "cluster_CENTER_MAG",
+        "integer_bins": False,
         "nbins": 50,
         "start": 1000,
         "stop": 7000,
@@ -251,6 +297,7 @@ plot_settings = {
     },
     "cluster_ENG_FRAC_EM": {
         "feature": "cluster_ENG_FRAC_EM",
+        "integer_bins": False,
         "nbins": 50,
         "start": 0,
         "stop": 1,
@@ -258,6 +305,7 @@ plot_settings = {
     },
     "cluster_SECOND_TIME": {
         "feature": "cluster_SECOND_TIME",
+        "integer_bins": False,
         "nbins": 50,
         "start": 1e-10,
         "stop": 1e-5,
@@ -266,6 +314,7 @@ plot_settings = {
     },
     "cluster_AVG_TILE_Q": {
         "feature": "cluster_AVG_TILE_Q",
+        "integer_bins": False,
         "nbins": 50,
         "start": 0,
         "stop": 100,
@@ -274,6 +323,7 @@ plot_settings = {
     },
     "cluster_AVG_LAR_Q": {
         "feature": "cluster_AVG_LAR_Q",
+        "integer_bins": False,
         "nbins": 1000,
         "start": 0,
         "stop": 4000,
@@ -282,6 +332,7 @@ plot_settings = {
     },
     "cluster_SECOND_R": {
         "feature": "cluster_SECOND_R",
+        "integer_bins": False,
         "nbins": 50,
         "start": 1e-6,
         "stop": 1e-3,
@@ -290,6 +341,7 @@ plot_settings = {
     },
     "cluster_LATERAL": {
         "feature": "cluster_LATERAL",
+        "integer_bins": False,
         "nbins": 50,
         "start": 0,
         "stop": 1,
@@ -297,6 +349,7 @@ plot_settings = {
     },
     "cluster_time": {
         "feature": "cluster_time",
+        "integer_bins": False,
         "nbins": 100,
         "start": -50,
         "stop": 50,
@@ -304,13 +357,15 @@ plot_settings = {
     },
     "cluster_ISOLATION": {
         "feature": "cluster_ISOLATION",
+        "integer_bins": False,
         "nbins": 50,
         "start": 0,
         "stop": 1,
-        "xlabel": r"$cluster_{\mathrm{iso}}$",
+        "xlabel": r"$f_{\mathrm{iso}}$",
     },
     "cluster_DELTA_ALPHA": {
         "feature": "cluster_DELTA_ALPHA",
+        "integer_bins": False,
         "nbins": 50,
         "start": 0,
         "stop": 1,
@@ -318,6 +373,7 @@ plot_settings = {
     },
     "cluster_DELTA_THETA": {
         "feature": "cluster_DELTA_THETA",
+        "integer_bins": False,
         "nbins": 50,
         "start": -1,
         "stop": 1,
@@ -325,6 +381,7 @@ plot_settings = {
     },
     "clusterEta": {
         "feature": "clusterEta",
+        "integer_bins": False,
         "nbins": 50,
         "start": -3.5,
         "stop": 3.5,
@@ -332,6 +389,7 @@ plot_settings = {
     },
     "clusterPhi": {
         "feature": "clusterPhi",
+        "integer_bins": False,
         "nbins": 50,
         "start": -3.5,
         "stop": 3.5,
@@ -339,6 +397,7 @@ plot_settings = {
     },
     "cluster_SECOND_LAMBDA": {
         "feature": "cluster_SECOND_LAMBDA",
+        "integer_bins": False,
         "nbins": 50,
         "start": 1,
         "stop": 1e6,
@@ -347,6 +406,7 @@ plot_settings = {
     },
     "cluster_LONGITUDINAL": {
         "feature": "cluster_LONGITUDINAL",
+        "integer_bins": False,
         "nbins": 50,
         "start": 0,
         "stop": 1,
@@ -354,6 +414,7 @@ plot_settings = {
     },
     "cluster_CELL_SIGNIFICANCE": {
         "feature": "cluster_CELL_SIGNIFICANCE",
+        "integer_bins": False,
         "nbins": 50,
         "start": 1,
         "stop": 1e3,
