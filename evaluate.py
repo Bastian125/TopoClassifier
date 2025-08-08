@@ -241,12 +241,19 @@ def plot_cluster_response_comparison_histogram(
 
 
 def plot_permutation_importance(
-    model, dataset, feature_names, prefix_path, device="cpu", batch_size=10000
+    model,
+    dataset,
+    feature_names,
+    prefix_path,
+    device="cpu",
+    batch_size=10000,
+    n_repeats=10,
 ):
     """
     Computes and plots feature permutation importance using AUC drop.
-    Uses DataLoader batching to prevent memory issues.
+    Repeats each permutation multiple times for better statistics.
     """
+    import matplotlib.pyplot as plt
     from sklearn.metrics import roc_auc_score
     from torch.utils.data import TensorDataset, DataLoader
 
@@ -273,39 +280,58 @@ def plot_permutation_importance(
             base_preds.extend(outputs)
     base_score = roc_auc_score(y_true, base_preds)
 
-    # Permutation importance
+    # Permutation importance with repeats
     importances = []
 
     for i, feat in enumerate(feature_names):
-        X_permuted = original_X.copy()
-        np.random.shuffle(X_permuted[:, i])
+        drops = []
 
-        perm_preds = []
-        perm_loader = DataLoader(
-            TensorDataset(torch.tensor(X_permuted, dtype=torch.float32)),
-            batch_size=batch_size,
-            shuffle=False,
-        )
+        for _ in range(n_repeats):
+            X_permuted = original_X.copy()
+            np.random.shuffle(X_permuted[:, i])
 
-        with torch.no_grad():
-            for batch in perm_loader:
-                inputs = batch[0].to(device)
-                outputs = torch.sigmoid(model(inputs)).cpu().numpy().flatten()
-                perm_preds.extend(outputs)
+            perm_preds = []
+            perm_loader = DataLoader(
+                TensorDataset(torch.tensor(X_permuted, dtype=torch.float32)),
+                batch_size=batch_size,
+                shuffle=False,
+            )
 
-        perm_score = roc_auc_score(y_true, perm_preds)
-        importances.append(base_score - perm_score)
+            with torch.no_grad():
+                for batch in perm_loader:
+                    inputs = batch[0].to(device)
+                    outputs = torch.sigmoid(model(inputs)).cpu().numpy().flatten()
+                    perm_preds.extend(outputs)
 
-    # Sort and plot
-    sorted_idx = np.argsort(importances)[::-1]
+            perm_score = roc_auc_score(y_true, perm_preds)
+            drops.append(base_score - perm_score)
+
+        importances.append(drops)
+
+    # Convert to arrays for easier processing
+    importances = np.array(importances)  # shape (n_features, n_repeats)
+    mean_importance = np.mean(importances, axis=1)
+    std_importance = np.std(importances, axis=1)
+
+    # Sort by mean importance
+    sorted_idx = np.argsort(mean_importance)[::-1]
     sorted_features = [
         latex_labels.get(name, name) for name in np.array(feature_names)[sorted_idx]
     ]
-    sorted_importances = np.array(importances)[sorted_idx]
+    sorted_means = mean_importance[sorted_idx]
+    sorted_stds = std_importance[sorted_idx]
 
+    # Plot with error bars
     plt.figure(figsize=(10, 6))
-    plt.barh(sorted_features, sorted_importances)
-    plt.xlabel("Drop in AUC")
+    plt.barh(
+        sorted_features,
+        sorted_means,
+        xerr=sorted_stds,
+        capsize=4,
+        color="tab:blue",
+        edgecolor="black",
+    )
+    plt.xlabel("Drop in AUC (mean ± std)")
     plt.gca().invert_yaxis()
     plt.tight_layout()
 
