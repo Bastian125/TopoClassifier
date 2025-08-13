@@ -1,1 +1,1 @@
-Average Precision: 0.841171
+Average Precision: 0.841310
