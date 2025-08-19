@@ -150,7 +150,6 @@ def plot_feature(
     data = load_feature(feature=feature, campaign=campaign, subcampaign=subcampaign)
     data = data[np.isfinite(data)]  # guard against NaN/Inf
 
-    # --- choose x-bins (logx affects bins; logy does NOT) ---
     if integer_bins:
         mn, mx = int(np.floor(np.min(data))), int(np.ceil(np.max(data)))
         bins = np.arange(mn, mx + 1, 1)
@@ -163,13 +162,12 @@ def plot_feature(
         bins = nbins
         plt.xlim([start, stop])
 
-    # --- plot ---
     n, _, _ = plt.hist(data, density=density, bins=bins, histtype="step")
 
-    # --- optional log-y with sensible bottom ---
     if logy and np.any(n > 0):
         plt.yscale("log")
         min_pos = np.min(n[n > 0])
+
         # pad one decade below the smallest positive bin height (cap at a tiny floor)
         plt.ylim(bottom=max(min_pos * 0.1, 1e-8))
 
