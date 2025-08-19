@@ -143,6 +143,7 @@ elif "Run3" in train_dataset_str and "GAT" in model_str:
     LEARNING_RATE = LEARNING_RATE_GNN
     BATCH_SIZE = BATCH_SIZE_RUN3
 
+
 # ---------- Helper Functions ---------- #
 def plot_training_history(history):
     """Plot and save training vs validation loss curves."""
@@ -664,21 +665,6 @@ def main():
             plot_precision_recall(y_true, y_pred, prefix_path=roc_prefix_test)
             plot_prediction_histogram(y_true, y_pred, prefix_path=roc_prefix_test)
 
-            if args.feature_importance and model_str == "DNN":
-                plot_permutation_importance(
-                    model=model,
-                    dataset=test_dataset,
-                    feature_names=feature_keys,
-                    prefix_path=roc_prefix_test,
-                )
-            elif args.feature_importance and model_str == "JetDNN":
-                plot_permutation_importance(
-                    model=model,
-                    dataset=test_dataset,
-                    feature_names=jet_feature_keys,
-                    prefix_path=roc_prefix_test,
-                )
-
             # Load from threshold TXT
             with open(roc_prefix_test + "_threshold.txt") as f:
                 for line in f:
@@ -694,6 +680,155 @@ def main():
                 prefix_path=roc_prefix_test,
                 threshold=best_threshold,
             )
+
+            # Plots in different energy bins
+            with h5py.File(test_file, "r") as f:
+                clusterE = f["clusterE"][:]
+
+            mask40 = clusterE <= np.log10(40)
+            mask100 = (clusterE > np.log10(40)) & (clusterE <= np.log10(100))
+            mask300 = (clusterE > np.log10(100)) & (clusterE <= np.log10(300))
+
+            plot_roc_curve(
+                y_true[mask40],
+                y_pred[mask40],
+                prefix_path=roc_prefix_test + "_Ebin_0_40",
+            )
+            plot_roc_curve(
+                y_true[mask100],
+                y_pred[mask100],
+                prefix_path=roc_prefix_test + "_Ebin_40_100",
+            )
+            plot_roc_curve(
+                y_true[mask300],
+                y_pred[mask300],
+                prefix_path=roc_prefix_test + "_Ebin_100_300",
+            )
+
+            plot_precision_recall(
+                y_true[mask40],
+                y_pred[mask40],
+                prefix_path=roc_prefix_test + "_Ebin_0_40",
+            )
+            plot_precision_recall(
+                y_true[mask100],
+                y_pred[mask100],
+                prefix_path=roc_prefix_test + "_Ebin_40_100",
+            )
+            plot_precision_recall(
+                y_true[mask300],
+                y_pred[mask300],
+                prefix_path=roc_prefix_test + "_Ebin_100_300",
+            )
+
+            plot_prediction_histogram(
+                y_true[mask40],
+                y_pred[mask40],
+                prefix_path=roc_prefix_test + "_Ebin_0_40",
+            )
+            plot_prediction_histogram(
+                y_true[mask100],
+                y_pred[mask100],
+                prefix_path=roc_prefix_test + "_Ebin_40_100",
+            )
+            plot_prediction_histogram(
+                y_true[mask300],
+                y_pred[mask300],
+                prefix_path=roc_prefix_test + "_Ebin_100_300",
+            )
+
+            with open(roc_prefix_test + "_Ebin_0_40_threshold.txt") as f:
+                for line in f:
+                    if line.startswith("Best threshold:"):
+                        best_threshold = float(line.split(":")[1].strip())
+
+            with h5py.File(test_file, "r") as f:
+                cluster_response = f["cluster_response"][:]
+
+            plot_cluster_response_comparison_histogram(
+                true_response=cluster_response[mask40],
+                y_pred_probs=y_pred[mask40],
+                prefix_path=roc_prefix_test + "_Ebin_0_40",
+                threshold=best_threshold,
+            )
+
+            with open(roc_prefix_test + "_Ebin_40_100_threshold.txt") as f:
+                for line in f:
+                    if line.startswith("Best threshold:"):
+                        best_threshold = float(line.split(":")[1].strip())
+
+            with h5py.File(test_file, "r") as f:
+                cluster_response = f["cluster_response"][:]
+
+            plot_cluster_response_comparison_histogram(
+                true_response=cluster_response[mask100],
+                y_pred_probs=y_pred[mask100],
+                prefix_path=roc_prefix_test + "_Ebin_40_100",
+                threshold=best_threshold,
+            )
+
+            with open(roc_prefix_test + "_Ebin_100_300_threshold.txt") as f:
+                for line in f:
+                    if line.startswith("Best threshold:"):
+                        best_threshold = float(line.split(":")[1].strip())
+
+            with h5py.File(test_file, "r") as f:
+                cluster_response = f["cluster_response"][:]
+
+            plot_cluster_response_comparison_histogram(
+                true_response=cluster_response[mask300],
+                y_pred_probs=y_pred[mask300],
+                prefix_path=roc_prefix_test + "_Ebin_100_300",
+                threshold=best_threshold,
+            )
+
+            # Plot without tile-gap
+            with h5py.File(test_file, "r") as f:
+                clusterEta = f["clusterEta"][:]
+
+            mask = (np.abs(clusterEta) <= 1.37) | (np.abs(clusterEta) >= 1.52)
+
+            plot_roc_curve(
+                y_true[mask],
+                y_pred[mask],
+                prefix_path=roc_prefix_test + "woTileGap",
+            )
+            plot_precision_recall(
+                y_true[mask], y_pred[mask], prefix_path=roc_prefix_test + "woTileGap"
+            )
+            plot_prediction_histogram(
+                y_true[mask], y_pred[mask], prefix_path=roc_prefix_test + "woTileGap"
+            )
+
+            with open(roc_prefix_test + "woTileGap_threshold.txt") as f:
+                for line in f:
+                    if line.startswith("Best threshold:"):
+                        best_threshold = float(line.split(":")[1].strip())
+
+            with h5py.File(test_file, "r") as f:
+                cluster_response = f["cluster_response"][:]
+
+            plot_cluster_response_comparison_histogram(
+                true_response=cluster_response[mask],
+                y_pred_probs=y_pred[mask],
+                prefix_path=roc_prefix_test + "woTileGap",
+                threshold=best_threshold,
+            )
+
+            if args.feature_importance and model_str == "DNN":
+                plot_permutation_importance(
+                    model=model,
+                    dataset=test_dataset,
+                    feature_names=feature_keys,
+                    prefix_path=roc_prefix_test,
+                )
+            elif args.feature_importance and model_str == "JetDNN":
+                plot_permutation_importance(
+                    model=model,
+                    dataset=test_dataset,
+                    feature_names=jet_feature_keys,
+                    prefix_path=roc_prefix_test,
+                )
 
         elif model_str == "GAT" or model_str == "GCN":
             test_pattern = os.path.join(
