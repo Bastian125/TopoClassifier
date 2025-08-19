@@ -231,7 +231,7 @@ plot_settings = {
         "stop": 100,
         "xlabel": r"$\langle \mu \rangle$",
         "ylabel": "Number of topoclusters",
-        "log": False,
+        "logx": False,
     },
     "NPV": {
         "feature": "nPrimVtx",
@@ -241,7 +241,7 @@ plot_settings = {
         "stop": 50,
         "xlabel": r"$N_{\mathrm{PV}}$",
         "ylabel": "Number of topoclusters",
-        "log": False,
+        "logx": False,
     },
     "clusterE": {
         "feature": "clusterE",
@@ -250,7 +250,7 @@ plot_settings = {
         "start": 1e-1,
         "stop": 1e2,
         "xlabel": r"$E_{\mathrm{clus}}^{\mathrm{EM}} [\mathrm{GeV}]$",
-        "log": True,
+        "logx": True,
     },
     "cluster_FIRST_ENG_DENS": {
         "feature": "cluster_FIRST_ENG_DENS",
@@ -259,7 +259,7 @@ plot_settings = {
         "start": 1e-10,
         "stop": 1e-4,
         "xlabel": r"$\langle \rho_{\mathrm{cell}} \rangle [\mathrm{GeV}/\mathrm{mm}^{3}]$",
-        "log": True,
+        "logx": True,
     },
     "cluster_EM_PROBABILITY": {
         "feature": "cluster_EM_PROBABILITY",
@@ -276,7 +276,7 @@ plot_settings = {
         "start": 1e0,
         "stop": 1e4,
         "xlabel": r"$\lambda_{\mathrm{clus}} [\mathrm{mm}]$",
-        "log": True,
+        "logx": True,
     },
     "cluster_nCells_tot": {
         "feature": "cluster_nCells_tot",
@@ -285,7 +285,7 @@ plot_settings = {
         "start": 1e1,
         "stop": 1e3,
         "xlabel": r"$n_{\mathrm{cells}}$",
-        "log": True,
+        "logx": True,
     },
     "cluster_CENTER_MAG": {
         "feature": "cluster_CENTER_MAG",
@@ -310,7 +310,7 @@ plot_settings = {
         "start": 1e-10,
         "stop": 1e-5,
         "xlabel": r"$\sigma_{\mathrm{t}}^{2} [\mathrm{ns}^2]$",
-        "log": True,
+        "logx": True,
     },
     "cluster_AVG_TILE_Q": {
         "feature": "cluster_AVG_TILE_Q",
@@ -319,7 +319,8 @@ plot_settings = {
         "start": 0,
         "stop": 100,
         "xlabel": r"$\langle Q_{\mathrm{Tile}} \rangle [$ADC counts$]$",
-        "log": False,
+        "logx": False,
+        "logy": True,
     },
     "cluster_AVG_LAR_Q": {
         "feature": "cluster_AVG_LAR_Q",
@@ -328,7 +329,8 @@ plot_settings = {
         "start": 0,
         "stop": 4000,
         "xlabel": r"$\langle Q_{\mathrm{LAr}} \rangle [$ADC counts$]$",
-        "log": False,
+        "logx": False,
+        "logy": True,
     },
     "cluster_SECOND_R": {
         "feature": "cluster_SECOND_R",
@@ -337,7 +339,7 @@ plot_settings = {
         "start": 1e-6,
         "stop": 1e-3,
         "xlabel": r"$\langle r_{\mathrm{cell}}^{2} \rangle [\mathrm{mm}^2]$",
-        "log": True,
+        "logx": True,
     },
     "cluster_LATERAL": {
         "feature": "cluster_LATERAL",
@@ -402,7 +404,7 @@ plot_settings = {
         "start": 1,
         "stop": 1e6,
         "xlabel": r"$\langle \lambda_{\mathrm{cell}}^{2} \rangle [\mathrm{mm}^2]$",
-        "log": True,
+        "logx": True,
     },
     "cluster_LONGITUDINAL": {
         "feature": "cluster_LONGITUDINAL",
@@ -419,6 +421,6 @@ plot_settings = {
         "start": 1,
         "stop": 1e3,
         "xlabel": r"$max\{\varsigma_{\mathrm{clus}}^{\mathrm{EM}}\}$",
-        "log": True,
+        "logx": True,
     },
 }

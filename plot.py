@@ -412,62 +412,92 @@ def plot_mean_median_response(campaign, subcampaign, energy):
     plt.close()
 
 
-def plot_run_comparison(features):
+def plot_run_comparison(features, mu_min=30.0, mu_max=60.0):
     """
-    Plot each feature for concatenated Run 2 and Run 3 datasets.
+    Plot each feature for concatenated Run 2 and Run 3 datasets,
+    filtering events to avgMu in [mu_min, mu_max).
     """
     subcampaigns = ["a", "d", "e"]
 
     for feature_key in features:
         settings = plot_settings[feature_key]
         feature = settings["feature"]
-        nbins = settings["nbins"]
-        start = settings["start"]
-        stop = settings["stop"]
-        log = settings.get("log", False)
-        xlabel = settings.get("xlabel", feature)
-        ylabel = settings.get("ylabel", "Normalised")
+        nbins   = settings["nbins"]
+        start   = settings["start"]
+        stop    = settings["stop"]
+        logx    = settings.get("logx", False)  # use new flags
+        logy    = settings.get("logy", False)  # usually False here
+        xlabel  = settings.get("xlabel", feature)
+        ylabel  = settings.get("ylabel", "Normalised")
         density = settings.get("density", True)
 
-        print(
-            f"Comparing feature '{feature}' between MC20 and MC23 (all subcampaigns)..."
-        )
+        print(f"Comparing '{feature}' between MC20 and MC23, "
+              f"{mu_min} <= <mu> < {mu_max} ...")
 
-        # Load and concatenate features across subcampaigns
-        feature_20 = np.concatenate(
-            [load_feature(feature, 20, sub) for sub in subcampaigns]
-        )
-        feature_23 = np.concatenate(
-            [load_feature(feature, 23, sub) for sub in subcampaigns]
-        )
+        # Collect filtered data per run
+        run20_vals, run23_vals = [], []
 
-        if log:
-            bins = np.logspace(np.log10(start), np.log10(stop), nbins)
+        for sub in subcampaigns:
+            f20 = load_feature(feature, 20, sub)
+            m20 = load_feature("avgMu", 20, sub)
+            f23 = load_feature(feature, 23, sub)
+            m23 = load_feature("avgMu", 23, sub)
+
+            # finite masks + mu window
+            msk20 = np.isfinite(f20) & np.isfinite(m20) & (m20 >= mu_min) & (m20 < mu_max)
+            msk23 = np.isfinite(f23) & np.isfinite(m23) & (m23 >= mu_min) & (m23 < mu_max)
+
+            run20_vals.append(f20[msk20])
+            run23_vals.append(f23[msk23])
+
+        feature_20 = np.concatenate([a for a in run20_vals if a.size > 0], axis=0) \
+                     if any(a.size for a in run20_vals) else np.array([])
+        feature_23 = np.concatenate([a for a in run23_vals if a.size > 0], axis=0) \
+                     if any(a.size for a in run23_vals) else np.array([])
+
+        if feature_20.size == 0 and feature_23.size == 0:
+            print(f"  Skipping '{feature}': no entries in μ window.")
+            continue
+
+        # Binning / axes
+        if logx:
+            lo = max(start, np.nextafter(0, 1.0))
+            bins = np.logspace(np.log10(lo), np.log10(stop), nbins)
             plt.xscale("log")
         else:
             bins = nbins
             plt.xlim([start, stop])
 
-        plt.hist(
-            feature_20,
-            density=density,
-            bins=bins,
-            histtype="step",
-            label=r"Run 2",
-        )
-        plt.hist(
-            feature_23,
-            density=density,
-            bins=bins,
-            histtype="step",
-            label=r"Run 3",
-        )
+        # Plot
+        if feature_20.size:
+            plt.hist(feature_20, density=density, bins=bins, histtype="step", label="Run 2")
+        if feature_23.size:
+            plt.hist(feature_23, density=density, bins=bins, histtype="step", label="Run 3")
+
+        if logy:
+            # optional: sensible floor if densities are tiny
+            counts = []
+            if feature_20.size:
+                c20, _ = np.histogram(feature_20, bins=bins, density=density)
+                counts.append(c20)
+            if feature_23.size:
+                c23, _ = np.histogram(feature_23, bins=bins, density=density)
+                counts.append(c23)
+            if counts:
+                allc = np.concatenate(counts)
+                pos  = allc[allc > 0]
+                if pos.size:
+                    plt.yscale("log")
+                    plt.ylim(bottom=max(pos.min()*0.1, 1e-8))
+
         plt.xlabel(xlabel)
         plt.ylabel(ylabel)
         plt.legend()
         plt.tight_layout()
-        save_plot("run_comparison/MC20_vs_MC23", f"{feature}_run_comparison")
+        save_plot("run_comparison/MC20_vs_MC23",
+                  f"{feature}_run_comparison_mu_{int(mu_min)}_{int(mu_max)}")
         plt.close()
+
 
 
 def plot_features_overlayed_by_nPV_bins(subcampaign):
