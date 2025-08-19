@@ -136,36 +136,43 @@ def plot_feature(
     nbins,
     start,
     stop,
-    log=False,
+    logx=False,
+    logy=False,
     xlabel=None,
     ylabel="Normalised",
     density=True,
     integer_bins=False,
 ):
-    """
-    Plot a single feature, linear or log. Optionally uses integer bins.
-    """
-    print(f"Plot {feature} for MC{campaign}e...")
+    print(f"Plot {feature} for MC{campaign}{subcampaign}...")
     if xlabel is None:
         xlabel = feature
 
-    feature_data = load_feature(
-        feature=feature, campaign=campaign, subcampaign=subcampaign
-    )
+    data = load_feature(feature=feature, campaign=campaign, subcampaign=subcampaign)
+    data = data[np.isfinite(data)]  # guard against NaN/Inf
 
+    # --- choose x-bins (logx affects bins; logy does NOT) ---
     if integer_bins:
-        min_val = int(np.floor(np.min(feature_data)))
-        max_val = int(np.ceil(np.max(feature_data)))
-        bins = np.arange(min_val, max_val + 1, 1)
-        plt.xlim([min_val - 0.5, max_val + 0.5])
-    elif log:
-        bins = np.logspace(np.log10(start), np.log10(stop), nbins)
+        mn, mx = int(np.floor(np.min(data))), int(np.ceil(np.max(data)))
+        bins = np.arange(mn, mx + 1, 1)
+        plt.xlim([mn - 0.5, mx + 0.5])
+    elif logx:
+        lo = max(start, np.nextafter(0, 1.0))  # avoid log10(0)
+        bins = np.logspace(np.log10(lo), np.log10(stop), nbins)
         plt.xscale("log")
     else:
         bins = nbins
         plt.xlim([start, stop])
 
-    plt.hist(feature_data, density=density, bins=bins, histtype="step")
+    # --- plot ---
+    n, _, _ = plt.hist(data, density=density, bins=bins, histtype="step")
+
+    # --- optional log-y with sensible bottom ---
+    if logy and np.any(n > 0):
+        plt.yscale("log")
+        min_pos = np.min(n[n > 0])
+        # pad one decade below the smallest positive bin height (cap at a tiny floor)
+        plt.ylim(bottom=max(min_pos * 0.1, 1e-8))
+
     plt.xlabel(xlabel)
     plt.ylabel(ylabel)
     plt.tight_layout()
@@ -610,7 +617,8 @@ def plot_all_features(subcampaign):
             start = settings["start"]
             stop = settings["stop"]
             integer_bins = settings["integer_bins"]
-            log = settings.get("log", False)
+            logx = settings.get("logx", False)
+            logy = settings.get("logy", False)
             xlabel = settings.get("xlabel", feature)
             ylabel = settings.get("ylabel", "Normalised")
             density = settings.get("density", True)
@@ -625,7 +633,8 @@ def plot_all_features(subcampaign):
                 start=start,
                 stop=stop,
                 integer_bins=integer_bins,
-                log=log,
+                logx=logx,
+                logy=logy,
                 xlabel=xlabel,
                 ylabel=ylabel,
                 density=density,
