@@ -224,7 +224,7 @@ def plot_cluster_response_comparison_histogram(
         range=hrange,
         histtype="step",
         density=True,
-        label=rf"Selected by the model ($\geq$ {threshold:.2f})\\$\mathrm{{IQR}}$ = {iqr_selected:.2f}",
+        label=rf"Selected by the model ($\geq$ {threshold:.2f}) with $\mathrm{{IQR}}$ = {iqr_selected:.2f}",
     )
 
     plt.yscale("log")
