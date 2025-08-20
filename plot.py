@@ -200,7 +200,7 @@ def plot_response(campaign, subcampaign):
             range=hrange,
             histtype="step",
             density=True,
-            label=r"$1 < n_{\mathrm{PV}} \leq 10$",
+            label=r"$1 < N_{\mathrm{PV}} \leq 10$",
         )
         plt.hist(
             response[(n_PV <= 20) & (n_PV > 10)],
@@ -208,7 +208,7 @@ def plot_response(campaign, subcampaign):
             range=hrange,
             histtype="step",
             density=True,
-            label=r"$10 < n_{\mathrm{PV}} \leq 20$",
+            label=r"$10 < N_{\mathrm{PV}} \leq 20$",
         )
         plt.hist(
             response[(n_PV <= 30) & (n_PV > 20)],
@@ -216,7 +216,7 @@ def plot_response(campaign, subcampaign):
             range=hrange,
             histtype="step",
             density=True,
-            label=r"$20 < n_{\mathrm{PV}} \leq 30$",
+            label=r"$20 < N_{\mathrm{PV}} \leq 30$",
         )
         plt.hist(
             response[(n_PV > 30)],
@@ -224,13 +224,13 @@ def plot_response(campaign, subcampaign):
             range=hrange,
             histtype="step",
             density=True,
-            label=r"$n_{\mathrm{PV}} > 30$",
+            label=r"$N_{\mathrm{PV}} > 30$",
         )
 
         if log_y:
             plt.yscale("log")
 
-        plt.xlabel(r"Response")
+        plt.xlabel(r"$R_{\mathrm{clus}}^{\mathrm{EM}}$")
         plt.ylabel("Normalised")
         plt.xlim(lim)
         plt.legend()
@@ -270,7 +270,7 @@ def plot_response_with_and_with_out_PU(campaign, subcampaign):
             range=hrange,
             histtype="step",
             density=True,
-            label=r"$1 < n_{\mathrm{PV}} \leq 10$",
+            label=r"$1 < N_{\mathrm{PV}} \leq 10$",
         )
         plt.hist(
             response[(n_PV <= 20) & (n_PV > 10)],
@@ -278,7 +278,7 @@ def plot_response_with_and_with_out_PU(campaign, subcampaign):
             range=hrange,
             histtype="step",
             density=True,
-            label=r"$10 < n_{\mathrm{PV}} \leq 20$",
+            label=r"$10 < N_{\mathrm{PV}} \leq 20$",
         )
         plt.hist(
             response[(n_PV <= 30) & (n_PV > 20)],
@@ -286,7 +286,7 @@ def plot_response_with_and_with_out_PU(campaign, subcampaign):
             range=hrange,
             histtype="step",
             density=True,
-            label=r"$20 < n_{\mathrm{PV}} \leq 30$",
+            label=r"$20 < N_{\mathrm{PV}} \leq 30$",
         )
         plt.hist(
             response[(n_PV > 30)],
@@ -294,7 +294,7 @@ def plot_response_with_and_with_out_PU(campaign, subcampaign):
             range=hrange,
             histtype="step",
             density=True,
-            label=r"$n_{\mathrm{PV}} > 30$",
+            label=r"$N_{\mathrm{PV}} > 30$",
         )
         plt.hist(
             response_noPU,
@@ -307,7 +307,7 @@ def plot_response_with_and_with_out_PU(campaign, subcampaign):
 
         if log_y:
             plt.yscale("log")
-        plt.xlabel(r"Response")
+        plt.xlabel(r"$R_{\mathrm{clus}}^{\mathrm{EM}}$")
         plt.ylabel("Normalised")
         plt.xlim(lim)
         plt.legend()
@@ -400,7 +400,7 @@ def plot_mean_median_response(campaign, subcampaign, energy):
     )
     plt.xlim(10, 45)
     plt.xlabel(r"$N_{\mathrm{PV}}$")
-    plt.ylabel(r"Response")
+    plt.ylabel(r"$R_{\mathrm{clus}}^{\mathrm{EM}}$")
     plt.legend(loc="upper left")
     plt.tight_layout()
     if energy == "all":
@@ -490,6 +490,7 @@ def plot_run_comparison(features, mu_min=30.0, mu_max=60.0):
                     plt.yscale("log")
                     plt.ylim(bottom=max(pos.min()*0.1, 1e-8))
 
+        plt.plot([], [], ' ', label=rf"${mu_min} \leq \langle \mu \rangle < {mu_max}$")
         plt.xlabel(xlabel)
         plt.ylabel(ylabel)
         plt.legend()
@@ -511,10 +512,10 @@ def plot_features_overlayed_by_nPV_bins(subcampaign):
         (30, None),  # nPV > 30
     ]
     nPV_labels = [
-        r"$n_{\mathrm{PV}} < 10$",
-        r"$10 \leq n_{\mathrm{PV}} < 20$",
-        r"$20 \leq n_{\mathrm{PV}} < 30$",
-        r"$n_{\mathrm{PV}} > 30$",
+        r"$N_{\mathrm{PV}} < 10$",
+        r"$10 \leq N_{\mathrm{PV}} < 20$",
+        r"$20 \leq N_{\mathrm{PV}} < 30$",
+        r"$N_{\mathrm{PV}} > 30$",
     ]
 
     for campaign in [20, 23]:
@@ -715,7 +716,7 @@ def main():
                     nbins=50,
                     start=0,
                     stop=50,
-                    xlabel=r"$n_{\mathrm{PV}}$",
+                    xlabel=r"$N_{\mathrm{PV}}$",
                     ylabel="Number of topoclusters",
                     integer_bins=True,
                 )
