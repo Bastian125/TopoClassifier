@@ -162,6 +162,7 @@ jet_feature_keys = [
 def set_style():
     plt.rcParams.update(
         {
+            "figure.figsize": (7.2, 4.8),
             "axes.prop_cycle": plt.cycler(
                 color=[
                     "#0072B2",  # Blue
