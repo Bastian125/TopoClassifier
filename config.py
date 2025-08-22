@@ -163,6 +163,9 @@ def set_style():
     plt.rcParams.update(
         {
             "figure.figsize": (7.2, 4.8),
+            "figure.constrained_layout.use": True,
+            "savefig.bbox": "tight",
+            "text.usetex": True,
             "axes.prop_cycle": plt.cycler(
                 color=[
                     "#0072B2",  # Blue

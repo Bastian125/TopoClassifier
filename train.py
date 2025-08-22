@@ -389,71 +389,96 @@ def test_gnn_model(
     test_output_dir,
     test_campaign,
     feature_importance=False,
+    model_name=None,   # will default to class name if None
 ):
     """
-    Evaluate a GNN model (e.g. GAT) using an IterableDataset.
+    Evaluate a GNN model (GCN or GAT) on *.pt graph chunks and produce plots.
 
     Args:
-        model_class (nn.Module): The GNN model class (e.g., GAT).
-        dataset_pattern (str): Glob pattern for loading *.pt test chunks.
+        model_class (nn.Module): GNN class (GAT or GCN).
+        dataset_pattern (str): Glob for test chunks (e.g., "..._graph_test_chunk*.pt").
         model_path (str): Path to saved model weights (.pt).
-        test_output_dir (str): Output dir for plots and predictions.
-        test_campaign (str): Campaign name (e.g., mc23e).
-        feature_importance (bool): Currently unused for GNN, but supported.
+        test_output_dir (str): Output directory for plots/files.
+        test_campaign (str): Campaign tag (e.g., "mc23e").
+        feature_importance (bool): Placeholder; not implemented for GNNs.
+        model_name (str|None): Used for file prefixes; defaults to model_class.__name__.
     """
-    # Load dataset and get input dimension via peek
+    import os
+    import h5py
+    import torch
+    from torch_geometric.loader import DataLoader as GeoDataLoader
+
+    # --- Resolve name used in file prefixes ---
+    if model_name is None:
+        model_name = model_class.__name__
+
+    # --- Peek to get input dimension ---
     test_dataset = JetGraphIterableDataset(dataset_pattern)
     peek_loader = GeoDataLoader(test_dataset, batch_size=BATCH_SIZE)
     first_batch = next(iter(peek_loader))
     input_dim = first_batch.x.shape[1]
 
-    # Reset loader for full inference
+    # --- Full test loader (recreate iterator) ---
     test_loader = GeoDataLoader(
-        JetGraphIterableDataset(dataset_pattern), batch_size=BATCH_SIZE
+        JetGraphIterableDataset(dataset_pattern),
+        batch_size=BATCH_SIZE
     )
 
-    # Load model
-    model = model_class(input_dim).to(DEVICE)
-    model.load_state_dict(torch.load(model_path))
+    # --- Build and load model (GCN needs explicit hidden/num_classes) ---
+    if model_class.__name__ == "GCN":
+        model = model_class(
+            in_channels=input_dim,
+            hidden_channels=64,
+            num_classes=1
+        ).to(DEVICE)
+    else:
+        model = model_class(input_dim).to(DEVICE)
 
-    # Predict
+    # Safer state dict load (falls back if weights_only unsupported)
+    try:
+        state = torch.load(model_path, map_location="cpu", weights_only=True)
+    except TypeError:
+        state = torch.load(model_path, map_location="cpu")
+    model.load_state_dict(state)
+
+    # --- Inference ---
     y_true, y_pred, cluster_response = get_predictions_GNN(model, test_loader)
 
+    # --- Common prefix for all outputs (uses actual model name) ---
+    prefix = os.path.join(test_output_dir, f"{model_name}_on_{test_campaign}")
+
     # Save predictions
-    pred_file = os.path.join(test_output_dir, f"GAT_on_{test_campaign}_predictions.h5")
-    with h5py.File(pred_file, "w") as f:
+    with h5py.File(prefix + "_predictions.h5", "w") as f:
         f.create_dataset("y_true", data=y_true)
         f.create_dataset("y_pred", data=y_pred)
 
-    # Plotting
-    roc_prefix = os.path.join(test_output_dir, f"GAT_on_{test_campaign}")
-    plot_roc_curve(y_true, y_pred, prefix_path=roc_prefix)
-    plot_precision_recall(y_true, y_pred, prefix_path=roc_prefix)
-    plot_prediction_histogram(y_true, y_pred, prefix_path=roc_prefix)
+    # Plots
+    plot_roc_curve(y_true, y_pred, prefix_path=prefix)
+    plot_precision_recall(y_true, y_pred, prefix_path=prefix)
+    plot_prediction_histogram(y_true, y_pred, prefix_path=prefix)
 
-    # Warn if feature importance requested
     if feature_importance:
-        print("⚠ Feature importance not implemented for GNN models.")
+        print("⚠ Feature importance is not implemented for GNN models.")
 
-    # Cluster response
-    threshold_txt = roc_prefix + "_threshold.txt"
-    if os.path.exists(threshold_txt):
-        with open(threshold_txt) as f:
+    # --- Threshold for response comparison plot ---
+    threshold = 0.5
+    thresh_file = prefix + "_threshold.txt"
+    if os.path.exists(thresh_file):
+        with open(thresh_file) as f:
             for line in f:
                 if line.startswith("Best threshold:"):
-                    threshold = float(line.split(":")[1].strip())
+                    try:
+                        threshold = float(line.split(":")[1].strip())
+                    except ValueError:
+                        pass
                     break
-                else:
-                    threshold = 0.5
-                    print("Warning: Threshold not found, defaulting to 0.5")
     else:
-        threshold = 0.5
-        print("Warning: Threshold file missing, defaulting to 0.5")
+        print("Warning: Threshold file missing; defaulting to 0.5")
 
     plot_cluster_response_comparison_histogram(
         true_response=cluster_response,
         y_pred_probs=y_pred,
-        prefix_path=roc_prefix,
+        prefix_path=prefix,
         threshold=threshold,
     )
 
@@ -846,6 +871,7 @@ def main():
                 test_output_dir=test_out_dir,
                 test_campaign=args.test_campaign,
                 feature_importance=args.feature_importance,
+                model_name=model_str,
             )
 
 
