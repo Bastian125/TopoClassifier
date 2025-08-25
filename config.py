@@ -234,7 +234,7 @@ plot_settings = {
         "start": 0,
         "stop": 100,
         "xlabel": r"$\langle \mu \rangle$",
-        "ylabel": "Number of topoclusters",
+        "ylabel": "Normalised",
         "logx": False,
     },
     "NPV": {
@@ -244,7 +244,7 @@ plot_settings = {
         "start": 0,
         "stop": 50,
         "xlabel": r"$N_{\mathrm{PV}}$",
-        "ylabel": "Number of topoclusters",
+        "ylabel": "Normalised",
         "logx": False,
     },
     "clusterE": {

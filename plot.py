@@ -412,70 +412,125 @@ def plot_mean_median_response(campaign, subcampaign, energy):
     plt.close()
 
 
-def plot_run_comparison(features, mu_min=30.0, mu_max=60.0):
+def plot_run_comparison(features, mu_min=30.0, mu_max=60.0, which: str = "both"):
     """
-    Plot each feature for concatenated Run 2 and Run 3 datasets,
-    filtering events to avgMu in [mu_min, mu_max).
+    Plot each feature for concatenated Run 2 and Run 3 datasets.
+
+    which:
+      - "both"  -> make single-feature PDFs AND multipage subfigure PDFs
+      - "single"-> only single-feature PDFs (per-feature, restricted/all-μ)
+      - "grid"  -> only multipage subfigure PDFs (2 cols x 4 rows per page)
+
+    Outputs:
+      A) Per-feature PDFs (if which in {"both","single"}):
+         - (a) <mu> in [mu_min, mu_max)
+         - (b) all mu (unrestricted)  [legend extra skipped for avgMu itself]
+
+      B) Multipage subfigure PDFs (if which in {"both","grid"}):
+         - 2 columns × 4 rows = 8 subplots per A4 page
+         - includes all features except avgMu and NPV
+         - legend at the top with μ-selection, tight spacing to fill page
+
+    Special binning:
+      - avgMu, NPV      -> integer bins [n, n+1]
+      - cluster_time    -> integer bins from -40 to +40: [-40,-39],...,[39,40]
     """
     subcampaigns = ["a", "d", "e"]
 
-    for feature_key in features:
+    # -----------------------------
+    # Helpers
+    # -----------------------------
+    def get_feature_arrays(feature_key, restrict_mu):
         settings = plot_settings[feature_key]
         feature = settings["feature"]
-        nbins   = settings["nbins"]
-        start   = settings["start"]
-        stop    = settings["stop"]
-        logx    = settings.get("logx", False)  # use new flags
-        logy    = settings.get("logy", False)  # usually False here
-        xlabel  = settings.get("xlabel", feature)
-        ylabel  = settings.get("ylabel", "Normalised")
-        density = settings.get("density", True)
 
-        print(f"Comparing '{feature}' between MC20 and MC23, "
-              f"{mu_min} <= <mu> < {mu_max} ...")
-
-        # Collect filtered data per run
         run20_vals, run23_vals = [], []
-
         for sub in subcampaigns:
             f20 = load_feature(feature, 20, sub)
             m20 = load_feature("avgMu", 20, sub)
             f23 = load_feature(feature, 23, sub)
             m23 = load_feature("avgMu", 23, sub)
 
-            # finite masks + mu window
-            msk20 = np.isfinite(f20) & np.isfinite(m20) & (m20 >= mu_min) & (m20 < mu_max)
-            msk23 = np.isfinite(f23) & np.isfinite(m23) & (m23 >= mu_min) & (m23 < mu_max)
+            if restrict_mu:
+                msk20 = (
+                    np.isfinite(f20)
+                    & np.isfinite(m20)
+                    & (m20 >= mu_min)
+                    & (m20 < mu_max)
+                )
+                msk23 = (
+                    np.isfinite(f23)
+                    & np.isfinite(m23)
+                    & (m23 >= mu_min)
+                    & (m23 < mu_max)
+                )
+            else:
+                msk20 = np.isfinite(f20)
+                msk23 = np.isfinite(f23)
 
             run20_vals.append(f20[msk20])
             run23_vals.append(f23[msk23])
 
-        feature_20 = np.concatenate([a for a in run20_vals if a.size > 0], axis=0) \
-                     if any(a.size for a in run20_vals) else np.array([])
-        feature_23 = np.concatenate([a for a in run23_vals if a.size > 0], axis=0) \
-                     if any(a.size for a in run23_vals) else np.array([])
+        feature_20 = (
+            np.concatenate([a for a in run20_vals if a.size > 0], axis=0)
+            if any(a.size for a in run20_vals)
+            else np.array([])
+        )
+        feature_23 = (
+            np.concatenate([a for a in run23_vals if a.size > 0], axis=0)
+            if any(a.size for a in run23_vals)
+            else np.array([])
+        )
+        return feature_20, feature_23
 
-        if feature_20.size == 0 and feature_23.size == 0:
-            print(f"  Skipping '{feature}': no entries in μ window.")
-            continue
+    def setup_bins_and_axes(ax, feature_key):
+        settings = plot_settings[feature_key]
+        nbins = settings["nbins"]
+        start = settings["start"]
+        stop = settings["stop"]
+        logx = settings.get("logx", False)
 
-        # Binning / axes
         if logx:
             lo = max(start, np.nextafter(0, 1.0))
             bins = np.logspace(np.log10(lo), np.log10(stop), nbins)
-            plt.xscale("log")
+            ax.set_xscale("log")
         else:
-            bins = nbins
-            plt.xlim([start, stop])
+            if feature_key in ("avgMu", "NPV"):
+                lo_int = int(np.floor(start))
+                hi_int = int(np.ceil(stop))
+                bins = np.arange(lo_int, hi_int + 1, 1)  # [n, n+1]
+                ax.set_xlim([lo_int, hi_int])
+                span = hi_int - lo_int
+                step = 1 if span <= 10 else int(np.ceil(span / 10))
+                ax.set_xticks(np.arange(lo_int, hi_int + 1, step))
+            elif feature_key == "cluster_time":
+                bins = np.arange(-40, 41, 1)  # [-40,-39],...,[39,40]
+                ax.set_xlim([-40, 40])
+                ax.set_xticks(np.arange(-40, 41, 5))
+            else:
+                bins = nbins
+                ax.set_xlim([start, stop])
+        return bins
 
-        # Plot
+    def draw_overlay(ax, feature_key, feature_20, feature_23):
+        settings = plot_settings[feature_key]
+        xlabel = settings.get("xlabel", settings["feature"])
+        ylabel = settings.get("ylabel", "Normalised")
+        density = settings.get("density", True)
+        logy = settings.get("logy", False)
+
+        bins = setup_bins_and_axes(ax, feature_key)
+
         if feature_20.size:
-            plt.hist(feature_20, density=density, bins=bins, histtype="step", label="Run 2")
+            ax.hist(
+                feature_20, density=density, bins=bins, histtype="step", label="Run 2"
+            )
         if feature_23.size:
-            plt.hist(feature_23, density=density, bins=bins, histtype="step", label="Run 3")
+            ax.hist(
+                feature_23, density=density, bins=bins, histtype="step", label="Run 3"
+            )
 
         if logy:
-            # optional: sensible floor if densities are tiny
             counts = []
             if feature_20.size:
                 c20, _ = np.histogram(feature_20, bins=bins, density=density)
@@ -485,20 +540,132 @@ def plot_run_comparison(features, mu_min=30.0, mu_max=60.0):
                 counts.append(c23)
             if counts:
                 allc = np.concatenate(counts)
-                pos  = allc[allc > 0]
+                pos = allc[allc > 0]
                 if pos.size:
-                    plt.yscale("log")
-                    plt.ylim(bottom=max(pos.min()*0.1, 1e-8))
+                    bottom = max(pos.min() * 0.1, 1e-8)
+                    ymin, ymax = ax.get_ylim()
+                    top = ymax if ymax > bottom else None
+                    ax.set_ylim(bottom=bottom, top=top)
+                    ax.set_yscale("log")
 
-        plt.plot([], [], ' ', label=rf"${mu_min} \leq \langle \mu \rangle < {mu_max}$")
-        plt.xlabel(xlabel)
-        plt.ylabel(ylabel)
-        plt.legend()
-        plt.tight_layout()
-        save_plot("run_comparison/MC20_vs_MC23",
-                  f"{feature}_run_comparison_mu_{int(mu_min)}_{int(mu_max)}")
-        plt.close()
+        # Compact but readable labels/ticks for tight grid
+        ax.set_xlabel(xlabel, fontsize=11, labelpad=2)
+        ax.set_ylabel(ylabel, fontsize=11, labelpad=2)
+        ax.tick_params(axis="both", labelsize=9, length=3)
 
+    # -----------------------------
+    # A) Per-feature PDFs
+    # -----------------------------
+    if which in {"both", "single"}:
+        for feature_key in features:
+            for restrict_mu in (True, False):
+                f20, f23 = get_feature_arrays(feature_key, restrict_mu)
+                if f20.size == 0 and f23.size == 0:
+                    continue
+
+                fig, ax = plt.subplots(1, 1)
+                draw_overlay(ax, feature_key, f20, f23)
+
+                if feature_key != "avgMu":
+                    if restrict_mu:
+                        ax.plot(
+                            [],
+                            [],
+                            " ",
+                            label=rf"${mu_min} \leq \langle \mu \rangle < {mu_max}$",
+                        )
+                    else:
+                        ax.plot([], [], " ", label="all $\mu$")
+
+                ax.legend()
+                fig.tight_layout()
+
+                suffix = f"_mu_{int(mu_min)}_{int(mu_max)}" if restrict_mu else ""
+                save_plot(
+                    "run_comparison/MC20_vs_MC23",
+                    f"{feature_key}_run_comparison{suffix}",
+                )
+                plt.close(fig)
+
+    # -----------------------------
+    # B) Multipage A4 grid (8 per page), minimal spacing, legend on top
+    # -----------------------------
+    if which in {"both", "grid"}:
+        grid_features = [fk for fk in features if fk not in ("avgMu", "NPV")]
+
+        from matplotlib.lines import Line2D
+
+        proxy_handles = [
+            Line2D([0], [0], linestyle="-", linewidth=1.8, color="C0", label="Run 2"),
+            Line2D([0], [0], linestyle="-", linewidth=1.8, color="C1", label="Run 3"),
+        ]
+
+        ncols, nrows = 2, 4
+        per_page = ncols * nrows
+
+        for restrict_mu in (True, False):
+            suffix_mu = f"_mu_{int(mu_min)}_{int(mu_max)}" if restrict_mu else "_allmu"
+            label_mu = (
+                rf"${mu_min} \leq \langle \mu \rangle < {mu_max}$"
+                if restrict_mu
+                else "all $\\mu$"
+            )
+
+            for page_start in range(0, len(grid_features), per_page):
+                page_feats = grid_features[page_start : page_start + per_page]
+
+                # Exact A4 portrait in inches
+                fig, axes = plt.subplots(
+                    nrows,
+                    ncols,
+                    figsize=(8.27, 11.69),
+                )
+                axes = axes.flatten()
+
+                # Tight subplot spacing to maximize usable area
+                fig.subplots_adjust(
+                    left=0.055,
+                    right=0.995,
+                    bottom=0.055,
+                    top=0.89,
+                    wspace=0.14,
+                    hspace=0.20,
+                )
+
+                for ax, fk in zip(axes, page_feats):
+                    f20, f23 = get_feature_arrays(fk, restrict_mu)
+                    if f20.size == 0 and f23.size == 0:
+                        ax.set_visible(False)
+                        continue
+                    draw_overlay(ax, fk, f20, f23)
+                    # Let axes fill available cell; no forced square to avoid wasted space
+                    # Small, informative title using the x-label field
+                    ttl = plot_settings[fk].get("xlabel", plot_settings[fk]["feature"])
+                    ax.set_title(ttl, fontsize=11, pad=2)
+
+                for ax in axes[len(page_feats) :]:
+                    ax.set_visible(False)
+
+                # Very compact legend at the top
+                extra_handle = Line2D([0], [0], linestyle=" ", label=label_mu)
+                handles = proxy_handles + [extra_handle]
+                fig.legend(
+                    handles=handles,
+                    loc="upper center",
+                    ncol=3,
+                    frameon=False,
+                    fontsize=11,
+                    bbox_to_anchor=(0.5, 0.985),
+                    borderaxespad=0.2,
+                )
+
+                # No suptitle; page area is filled by panels
+                page_idx = page_start // per_page + 1
+                save_plot(
+                    "run_comparison/MC20_vs_MC23",
+                    f"MC20_vs_MC23_grid{suffix_mu}_p{page_idx}",
+                )
+                plt.close(fig)
 
 
 def plot_features_overlayed_by_nPV_bins(subcampaign):
@@ -571,7 +738,15 @@ def plot_features_overlayed_by_nPV_bins(subcampaign):
 
 def plot_high_response(subcampaign):
     """
-    Plot every feature for MC20 and MC23 campaigns, overlaying clusters with response <= 40 and > 40.
+    Keep the original behavior: for MC20 and MC23, plot every feature in plot_settings,
+    overlaying clusters with response <= 40 and > 40 (one figure per feature).
+
+    Additionally, for each campaign, create a single 2x2 subplot figure for:
+      - cluster_eta
+      - cluster_phi
+      - cluster_DELTA_THETA
+      - cluster_DELTA_ALPHA
+    with consistent subplot sizes.
     """
     response_threshold = 40
     response_label = r"$R_{\mathrm{clus}}^{\mathrm{EM}}$"
@@ -579,6 +754,14 @@ def plot_high_response(subcampaign):
     category_labels = [
         rf"{response_label} $\leq$ {response_threshold}",
         rf"{response_label} $>$ {response_threshold}",
+    ]
+
+    # Features to include in the combined 2x2 subplot
+    subplot_features = [
+        "clusterEta",
+        "clusterPhi",
+        "cluster_DELTA_THETA",
+        "cluster_DELTA_ALPHA",
     ]
 
     for campaign in [20, 23]:
@@ -596,6 +779,9 @@ def plot_high_response(subcampaign):
             xlabel = settings.get("xlabel", feature_name)
             ylabel = settings.get("ylabel", "Normalised")
             density = settings.get("density", True)
+
+            # Start a fresh figure to avoid state bleed (e.g., log scale)
+            plt.figure()
 
             if log:
                 bins = np.logspace(np.log10(start), np.log10(stop), nbins)
@@ -633,6 +819,87 @@ def plot_high_response(subcampaign):
                 output_name=f"{feature_name}_high_response",
             )
             plt.close()
+
+        fig, axes = plt.subplots(2, 2, figsize=(10, 8))
+        axes = axes.flatten()
+
+        from matplotlib.lines import Line2D
+
+        proxy_handles = [
+            Line2D([0], [0], linestyle="-", linewidth=1, color="C0"),
+            Line2D([0], [0], linestyle="-", linewidth=1, color="C1"),
+        ]
+
+        for ax, feature_key in zip(axes, subplot_features):
+            if feature_key not in plot_settings:
+                ax.set_visible(False)
+                continue
+
+            settings = plot_settings[feature_key]
+            feature_name = settings["feature"]
+            feature_data = load_feature(feature_name, campaign, subcampaign=subcampaign)
+            nbins = settings["nbins"]
+            start = settings["start"]
+            stop = settings["stop"]
+            log = settings.get("log", False)
+            xlabel = settings.get("xlabel", feature_name)
+            ylabel = settings.get("ylabel", "Normalised")
+            density = settings.get("density", True)
+
+            if log:
+                bins = np.logspace(np.log10(start), np.log10(stop), nbins)
+                ax.set_xscale("log")
+            else:
+                bins = nbins
+                ax.set_xlim([start, stop])
+
+            # Draw the two categories with fixed colors for consistent legend proxies
+            colors = ["C0", "C1"]
+            for (low, high), label, c in zip(categories, category_labels, colors):
+                if low is None:
+                    mask = cluster_response <= high
+                elif high is None:
+                    mask = cluster_response > low
+                else:
+                    mask = (cluster_response > low) & (cluster_response <= high)
+
+                filtered_data = feature_data[mask]
+                ax.hist(
+                    filtered_data,
+                    bins=bins,
+                    density=density,
+                    histtype="step",
+                    label=label,
+                    color=c,
+                    linewidth=1.0,
+                )
+
+            ax.set_xlabel(xlabel)
+            ax.set_ylabel(ylabel)
+
+        # Reserve space at the bottom for the legend and place it there
+        fig.subplots_adjust(bottom=0.22)
+        fig.legend(
+            proxy_handles,
+            category_labels,
+            loc="lower center",
+            ncol=2,
+            fontsize=14,
+            frameon=False,
+            borderaxespad=0.5,
+        )
+
+        for ax in axes:
+            ax.set_xlabel(ax.get_xlabel(), fontsize=12)
+            ax.set_ylabel(ax.get_ylabel(), fontsize=12)
+            ax.tick_params(axis="both", which="major", labelsize=10)
+
+        plt.tight_layout(rect=[0, 0.05, 1, 1])
+        save_plot(
+            save_dir=f"{campaign}{subcampaign}/response_comparison",
+            output_name="eta_phi_dtheta_dalpha_high_response",
+        )
+        plt.close(fig)
 
 
 def plot_all_features(subcampaign):
@@ -698,7 +965,7 @@ def main():
                     start=0,
                     stop=100,
                     xlabel=r"$\langle \mu \rangle$",
-                    ylabel="Number of topoclusters",
+                    ylabel="Normalised",
                     integer_bins=True,
                 )
                 save_plot(
@@ -717,7 +984,7 @@ def main():
                     start=0,
                     stop=50,
                     xlabel=r"$N_{\mathrm{PV}}$",
-                    ylabel="Number of topoclusters",
+                    ylabel="Normalised",
                     integer_bins=True,
                 )
                 save_plot(
@@ -726,7 +993,7 @@ def main():
                 )
 
         if args.run_comparison or args.all:
-            plot_run_comparison(plot_settings)
+            plot_run_comparison(plot_settings, which="grid")
 
         if args.NPV_comparison or args.all:
             plot_features_overlayed_by_nPV_bins(sub)
