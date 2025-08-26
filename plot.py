@@ -622,14 +622,13 @@ def plot_run_comparison(features, mu_min=30.0, mu_max=60.0, which: str = "both")
                 )
                 axes = axes.flatten()
 
-                # Tight subplot spacing to maximize usable area
                 fig.subplots_adjust(
-                    left=0.055,
-                    right=0.995,
-                    bottom=0.055,
-                    top=0.89,
-                    wspace=0.14,
-                    hspace=0.20,
+                    left=0.08,
+                    right=0.98,
+                    bottom=0.08,
+                    top=0.93,
+                    wspace=0.28,
+                    hspace=0.35,
                 )
 
                 for ax, fk in zip(axes, page_feats):
@@ -638,15 +637,10 @@ def plot_run_comparison(features, mu_min=30.0, mu_max=60.0, which: str = "both")
                         ax.set_visible(False)
                         continue
                     draw_overlay(ax, fk, f20, f23)
-                    # Let axes fill available cell; no forced square to avoid wasted space
-                    # Small, informative title using the x-label field
-                    ttl = plot_settings[fk].get("xlabel", plot_settings[fk]["feature"])
-                    ax.set_title(ttl, fontsize=11, pad=2)
 
                 for ax in axes[len(page_feats) :]:
                     ax.set_visible(False)
 
-                # Very compact legend at the top
                 extra_handle = Line2D([0], [0], linestyle=" ", label=label_mu)
                 handles = proxy_handles + [extra_handle]
                 fig.legend(
@@ -654,12 +648,13 @@ def plot_run_comparison(features, mu_min=30.0, mu_max=60.0, which: str = "both")
                     loc="upper center",
                     ncol=3,
                     frameon=False,
-                    fontsize=11,
-                    bbox_to_anchor=(0.5, 0.985),
-                    borderaxespad=0.2,
+                    fontsize=10,
+                    bbox_to_anchor=(0.5, 0.965),
+                    borderaxespad=0.1,
+                    handletextpad=0.4,
+                    columnspacing=0.9,
                 )
 
-                # No suptitle; page area is filled by panels
                 page_idx = page_start // per_page + 1
                 save_plot(
                     "run_comparison/MC20_vs_MC23",
@@ -878,15 +873,17 @@ def plot_high_response(subcampaign):
             ax.set_ylabel(ylabel)
 
         # Reserve space at the bottom for the legend and place it there
-        fig.subplots_adjust(bottom=0.22)
+        fig.subplots_adjust(top=0.85)
         fig.legend(
             proxy_handles,
             category_labels,
-            loc="lower center",
+            loc="upper center",
             ncol=2,
             fontsize=14,
             frameon=False,
-            borderaxespad=0.5,
+            borderaxespad=0.3,
+            handletextpad=0.6,
+            columnspacing=1.2,
         )
 
         for ax in axes:
@@ -894,7 +891,8 @@ def plot_high_response(subcampaign):
             ax.set_ylabel(ax.get_ylabel(), fontsize=12)
             ax.tick_params(axis="both", which="major", labelsize=10)
 
-        plt.tight_layout(rect=[0, 0.05, 1, 1])
+        # Leave space for the top legend
+        plt.tight_layout(rect=[0, 0, 1, 0.92])
         save_plot(
             save_dir=f"{campaign}{subcampaign}/response_comparison",
             output_name="eta_phi_dtheta_dalpha_high_response",
