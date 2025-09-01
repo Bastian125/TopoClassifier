@@ -302,7 +302,7 @@ def plot_response_with_and_with_out_PU(campaign, subcampaign):
             range=hrange,
             histtype="step",
             density=True,
-            label="No pile-up",
+            label=r"No pile-up",
         )
 
         if log_y:
@@ -390,18 +390,18 @@ def plot_mean_median_response(campaign, subcampaign, energy):
     elif energy == ">=100~GeV":
         energy_label = r"$E_{\mathrm{clus}} \geq 100$ GeV"
 
-    # Dummy line for energy category
-    plt.plot([], [], " ", label=energy_label)
     plt.errorbar(
         n_PV_centers, mean_response, yerr=mean_uncertainty, fmt="o", label="Mean"
     )
     plt.errorbar(
         n_PV_centers, median_response, yerr=median_uncertainty, fmt="s", label="Median"
     )
+    # Dummy line for energy category
+    plt.plot([], [], " ", label=energy_label)
     plt.xlim(10, 45)
     plt.xlabel(r"$N_{\mathrm{PV}}$")
     plt.ylabel(r"$R_{\mathrm{clus}}^{\mathrm{EM}}$")
-    plt.legend(loc="upper left")
+    plt.legend()
     plt.tight_layout()
     if energy == "all":
         save_plot(f"{campaign}{subcampaign}/response", f"mean_median")
